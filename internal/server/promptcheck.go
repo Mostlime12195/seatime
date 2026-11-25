@@ -211,7 +211,29 @@ func (s *Server) handlePromptCheck(w http.ResponseWriter, r *http.Request) {
 	if n := rules.Caps.ContextTurns; len(ctxTurns) > n {
 		ctxTurns = ctxTurns[len(ctxTurns)-n:]
 	}
-	earlierTurns := req.Earlier
+	// A device does not know which of its prompts passed, so it sends the
+	// project's earlier prompts as they come: only those this server passed
+	// are shown to the judge.
+	var earlierTurns []promptcheck.Turn
+	if len(req.Earlier) > 0 {
+		hs := make([]string, 0, len(req.Earlier))
+		for _, t := range req.Earlier {
+			if t.CheckHash != "" {
+				hs = append(hs, t.CheckHash)
+			}
+		}
+		passes, err := s.store.PromptPasses(ctx, dev.ID, hs)
+		if err != nil {
+			s.log.Error("earlier prompts", "err", err)
+			jsonErr(w, 500, "internal error")
+			return
+		}
+		for _, t := range req.Earlier {
+			if passes[t.CheckHash].Pass {
+				earlierTurns = append(earlierTurns, t)
+			}
+		}
+	}
 	if n := pol.Earlier; len(earlierTurns) > n {
 		earlierTurns = earlierTurns[len(earlierTurns)-n:]
 	}
@@ -291,10 +313,11 @@ func trackerLine(s string) (string, *promptcheck.Activity) {
 	return a.String(), &a
 }
 
-// verdictResp is the answer for a verdict: the device counts the prompt
-// for Minutes, whatever table it was built with.
-func verdictResp(hash string, v *promptcheck.Verdict) api.PromptCheckResp {
-	return api.PromptCheckResp{CheckHash: hash, Pass: v.Pass, Minutes: v.Minutes, Rules: v.Rules}
+// verdictResp is the answer to a device: that the prompt was checked. The
+// decision and the minutes stay on the server, which counts the prompt's
+// time itself when the prompt's records arrive (segments.go).
+func verdictResp(hash string, _ *promptcheck.Verdict) api.PromptCheckResp {
+	return api.PromptCheckResp{CheckHash: hash}
 }
 
 // checkShape refuses a request that is not a prompt check's shape. Size

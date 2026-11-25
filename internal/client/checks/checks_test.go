@@ -89,7 +89,7 @@ func (s *fakeServer) send(_ context.Context, req api.PromptCheckReq) (api.Prompt
 		return api.PromptCheckResp{}, s.status, errors.New("server returned an error")
 	}
 	s.reqs = append(s.reqs, req)
-	return api.PromptCheckResp{CheckHash: req.CheckHash, Pass: s.pass[req.Turn.Prompt]}, 200, nil
+	return api.PromptCheckResp{CheckHash: req.CheckHash}, 200, nil
 }
 
 func TestTurnsAreSentAndCounted(t *testing.T) {
@@ -155,8 +155,10 @@ func TestTurnsAreSentAndCounted(t *testing.T) {
 			newBy[e.CheckHash] = *e.New
 		}
 	}
-	if !newBy[p1.CheckHash] || newBy[p2.CheckHash] || newBy[""] {
-		t.Fatalf("new by verdict: %v", newBy)
+	// the device is not told the verdicts: no checked prompt counts here,
+	// the server counts them when the records arrive
+	if newBy[p1.CheckHash] || newBy[p2.CheckHash] || newBy[""] {
+		t.Fatalf("a prompt counted on the device: %v", newBy)
 	}
 }
 
@@ -183,13 +185,8 @@ func TestOfflineChecksWaitAndRetry(t *testing.T) {
 		t.Fatalf("retry: %d %v", n, err)
 	}
 	pass, _ := f.st.CheckPasses()
-	if !pass[p1.CheckHash] {
-		t.Fatal("the verdict was not kept")
-	}
-	// it counts from the prompt's own time once it passes
-	res, _, _ := stats.Credit(f.st, f.t0.Add(-time.Hour), now)
-	if res.Total < 60 {
-		t.Fatalf("counted %v after the verdict", res.Total)
+	if _, ok := pass[p1.CheckHash]; !ok {
+		t.Fatal("the answer was not kept")
 	}
 	if pend, _ := stats.Pending(f.st, f.t0.Add(-time.Hour), now); pend != 0 {
 		t.Fatalf("still waiting: %v", pend)
@@ -221,8 +218,8 @@ func TestSwitchOffPausesTurns(t *testing.T) {
 	if n, err := checks.Drain(context.Background(), f.st, "dev1", srv.send, f.t0.Add(2*time.Hour), 20); n != 2 || err != nil {
 		t.Fatalf("back on: %d %v", n, err)
 	}
-	if pass, _ := f.st.CheckPasses(); !pass[p1.CheckHash] || len(pass) != 2 {
-		t.Fatalf("the paused turns were not checked: %v", pass)
+	if pass, _ := f.st.CheckPasses(); len(pass) != 2 {
+		t.Fatalf("the paused turns (the first: %s) were not checked: %v", p1.CheckHash, pass)
 	}
 }
 
@@ -243,7 +240,7 @@ func TestQueueSurvivesOutages(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			f := newFixture(t)
-			p1 := f.emit(t, 0, event.Event{Kind: event.Prompt, Text: prompt1})
+			f.emit(t, 0, event.Event{Kind: event.Prompt, Text: prompt1})
 			f.emit(t, 4*time.Minute, event.Event{Kind: event.AgentStop})
 			srv := &fakeServer{pass: map[string]bool{prompt1: true}}
 			c.fail(srv)
@@ -265,11 +262,8 @@ func TestQueueSurvivesOutages(t *testing.T) {
 			if n, err := checks.Drain(context.Background(), f.st, "dev1", srv.send, now.Add(2*time.Hour), 20); n != 1 || err != nil {
 				t.Fatalf("drain after: %d %v", n, err)
 			}
-			if pass, _ := f.st.CheckPasses(); !pass[p1.CheckHash] {
-				t.Fatal("no verdict after the outage")
-			}
-			if res, _, _ := stats.Credit(f.st, f.t0.Add(-time.Hour), f.t0.Add(time.Hour)); res.AI < 3*60 {
-				t.Fatalf("minutes after the outage: %.0f s", res.AI)
+			if pass, _ := f.st.CheckPasses(); len(pass) != 1 {
+				t.Fatal("no answer after the outage")
 			}
 		})
 	}
@@ -279,7 +273,7 @@ func TestQueueSurvivesOutages(t *testing.T) {
 // limit is ignored), it keeps its text and is sent once the server answers.
 func TestQueuedTurnNeverExpires(t *testing.T) {
 	f := newFixture(t)
-	p1 := f.emit(t, 0, event.Event{Kind: event.Prompt, Text: prompt1})
+	f.emit(t, 0, event.Event{Kind: event.Prompt, Text: prompt1})
 	f.emit(t, 4*time.Minute, event.Event{Kind: event.AgentStop})
 	f.st.SetMeta(store.MetaQueueDays, "2")
 	srv := &fakeServer{down: true}
@@ -303,13 +297,13 @@ func TestQueuedTurnNeverExpires(t *testing.T) {
 	if n, err := checks.Drain(context.Background(), f.st, "dev1", srv.send, f.t0.Add(90*24*time.Hour), 20); n != 1 || err != nil {
 		t.Fatalf("drain after 60 days: %d %v", n, err)
 	}
-	if pass, _ := f.st.CheckPasses(); !pass[p1.CheckHash] {
-		t.Fatal("no verdict")
+	if pass, _ := f.st.CheckPasses(); len(pass) != 1 {
+		t.Fatal("no answer")
 	}
 }
 
 // Guard: with the switch on, a submission still carries no prompt text and
-// no reply, only the hash; and its claim is the count by the verdicts.
+// no reply, only the hash; the server counts its prompts, not the device.
 func TestSubmissionCarriesNoCheckText(t *testing.T) {
 	f := newFixture(t)
 	p1 := f.emit(t, 0, event.Event{Kind: event.Prompt, Text: prompt1})
@@ -344,34 +338,28 @@ func TestSubmissionCarriesNoCheckText(t *testing.T) {
 	if !strings.Contains(string(raw), p1.CheckHash) {
 		t.Fatal("the bundle lacks the prompt hash the server counts by")
 	}
+	// the device is not told the verdicts, so its claim counts no prompt
 	pass, _ := f.st.CheckPasses()
-	revealed, _ := (&promptcheck.Set{On: true, Pass: pass}).Apply(audit.Revealed(prep.Bundle))
-	if got := audit.Claim(revealed, prep.Bundle.Project, prep.Bundle.Others...); got.Seconds() != prep.Bundle.Claimed.Seconds() || got.Seconds() < 4*60 {
-		t.Fatalf("claim %v, recount by the verdicts %v", prep.Bundle.Claimed.Seconds(), got.Seconds())
+	if len(pass) != 2 || prep.Bundle.Claimed.Seconds() != 0 {
+		t.Fatalf("answers %v, claim %v", pass, prep.Bundle.Claimed.Seconds())
 	}
-	// the server's analysis, with the same verdicts, agrees with the claim;
-	// with the first prompt's verdict missing, its time shows as waiting
+	// the server counts with its own verdicts (the first prompt passed, the
+	// second did not), whatever the device claimed; with the first prompt's
+	// verdict missing, its time shows as waiting
+	server := map[string]bool{}
+	for h := range pass {
+		server[h] = h == p1.CheckHash
+	}
 	hash, _ := f.st.HashAt(head)
 	cps := []api.ServerCheckpoint{{Seq: head, Hash: hash, ServerTS: f.t0.Add(16 * time.Minute)}}
-	a := audit.Analyze(audit.Input{Bundle: prep.Bundle, Checkpoints: cps, PromptCheck: &promptcheck.Set{On: true, Pass: pass}})
-	for _, pr := range a.Problems {
-		if strings.Contains(pr, "differs") {
-			t.Errorf("server and device disagree: %s", pr)
-		}
+	a := audit.Analyze(audit.Input{Bundle: prep.Bundle, Checkpoints: cps, PromptCheck: &promptcheck.Set{On: true, Pass: server}})
+	if a.Raw.Seconds() < 4*60 {
+		t.Fatalf("the server counted %v s", a.Raw.Seconds())
 	}
-	waiting := map[string]bool{}
-	for h, v := range pass {
-		if h != p1.CheckHash {
-			waiting[h] = v
-		}
-	}
-	a = audit.Analyze(audit.Input{Bundle: prep.Bundle, Checkpoints: cps, PromptCheck: &promptcheck.Set{On: true, Pass: waiting}})
+	delete(server, p1.CheckHash)
+	a = audit.Analyze(audit.Input{Bundle: prep.Bundle, Checkpoints: cps, PromptCheck: &promptcheck.Set{On: true, Pass: server}})
 	if a.Pending != 1 || a.PendingSeconds < 4*60 || a.Raw.Seconds() != 0 {
 		t.Fatalf("waiting: %d prompts, %v s pending, %v s counted", a.Pending, a.PendingSeconds, a.Raw.Seconds())
-	}
-	// the second prompt failed its check: only the first opens the 10 minutes
-	if all := audit.Claim(audit.Revealed(prep.Bundle), prep.Bundle.Project, prep.Bundle.Others...); all.Seconds() <= prep.Bundle.Claimed.Seconds() {
-		t.Fatalf("without the verdicts %v, with %v", all.Seconds(), prep.Bundle.Claimed.Seconds())
 	}
 }
 
@@ -440,68 +428,14 @@ func TestSentAtTurnEnd(t *testing.T) {
 	}
 }
 
-// A verdict that comes back after its minutes were synced makes the next
-// sync recount from the prompt's time, even with nothing new in the log.
-func TestLateVerdictRecounts(t *testing.T) {
-	f := newFixture(t)
-	p1 := f.emit(t, 0, event.Event{Kind: event.Prompt, Text: prompt1})
-	f.emit(t, 4*time.Minute, event.Event{Kind: event.AgentStop})
-	priv, pub, _ := syncer.NewKey()
-	sy := &syncer.Syncer{Store: f.st, Version: "test", Now: func() time.Time { return f.t0.Add(90 * time.Minute) },
-		Auth: &config.Auth{Token: "t", DeviceID: "dev1", Server: "http://127.0.0.1:1", PrivateKey: priv, PublicKey: pub}}
-	head, _, _ := f.st.Head()
-	f.st.SetSyncState(head, f.t0.Add(80*time.Minute)) // already synced, before the verdict
-	if _, ok, err := sy.Next(); ok || err != nil {
-		t.Fatalf("nothing new, yet a sync is planned: %v", err)
-	}
-	srv := &fakeServer{pass: map[string]bool{prompt1: true}}
-	if _, err := checks.Drain(context.Background(), f.st, "dev1", srv.send, f.t0.Add(85*time.Minute), 20); err != nil {
-		t.Fatal(err)
-	}
-	if !srv.reqs[0].PromptTS.Equal(p1.TS) {
-		t.Fatalf("prompt time %v, want %v", srv.reqs[0].PromptTS, p1.TS)
-	}
-	plan, ok, err := sy.Next()
-	if err != nil || !ok || plan.Requests[0].From.After(p1.TS) {
-		t.Fatalf("recount planned %v from %v: %v", ok, plan.Requests, err)
-	}
-	var counted float64
-	for _, r := range plan.Requests {
-		for _, b := range r.Buckets {
-			counted += b.Seconds()
-		}
-	}
-	if counted < 4*60 {
-		t.Fatalf("the recount holds %v s", counted)
-	}
-	if plan.Requests[0].ScoreVersion != ledger.CapVersion {
-		t.Fatal(plan.Requests[0].ScoreVersion)
-	}
-}
-
-// The sync tells the server how much time waits for the check, by project.
-func TestSyncReportsPending(t *testing.T) {
-	f := newFixture(t)
-	f.emit(t, 80*time.Minute, event.Event{Kind: event.Prompt, Text: prompt1})
-	f.emit(t, 84*time.Minute, event.Event{Kind: event.AgentStop})
-	priv, pub, _ := syncer.NewKey()
-	sy := &syncer.Syncer{Store: f.st, Version: "test", Now: func() time.Time { return f.t0.Add(90 * time.Minute) },
-		Auth: &config.Auth{Token: "t", DeviceID: "dev1", Server: "http://127.0.0.1:1", PrivateKey: priv, PublicKey: pub}}
-	plan, ok, err := sy.Next()
-	if err != nil || !ok {
-		t.Fatal(err)
-	}
-	last := plan.Requests[len(plan.Requests)-1]
-	if last.Pending == nil || len(last.Pending.Projects) != 1 || last.Pending.Projects[0].Seconds < 4*60 || strings.Contains(last.Pending.Projects[0].Project, "zorblax") {
-		t.Fatalf("pending %+v", last.Pending)
-	}
-}
-
 // topicJudge stands in for the model on the undo red team's paths: a
 // prompt is a repeat when an earlier prompt of the same topic (the word
 // after "TOPIC-") is anywhere in what the check is shown, context turns
 // or earlier prompts. It answers only from the request, as the model does.
-type topicJudge struct{ reqs []api.PromptCheckReq }
+type topicJudge struct {
+	reqs []api.PromptCheckReq
+	pass map[string]bool // by prompt hash: the decisions stay with the judge, as on the server
+}
 
 func topic(s string) string {
 	_, t, ok := strings.Cut(s, "TOPIC-")
@@ -513,14 +447,25 @@ func topic(s string) string {
 
 func (j *topicJudge) send(_ context.Context, req api.PromptCheckReq) (api.PromptCheckResp, int, error) {
 	j.reqs = append(j.reqs, req)
+	if j.pass == nil {
+		j.pass = map[string]bool{}
+	}
+	// the device sends the earlier prompts it has; the server shows the
+	// judge those it passed
+	shown := slices.Clone(req.Context)
+	for _, e := range req.Earlier {
+		if j.pass[e.CheckHash] {
+			shown = append(shown, e)
+		}
+	}
 	tp, again := topic(req.Turn.Prompt), false
-	for _, t := range append(slices.Clone(req.Context), req.Earlier...) {
+	for _, t := range shown {
 		if tp != "" && topic(t.Prompt) == tp {
 			again = true
 		}
 	}
-	pass := tp != "" && !again // throwaway prompts ("ok 3") have no topic and fail
-	return api.PromptCheckResp{CheckHash: req.CheckHash, Pass: pass, Minutes: 10}, 200, nil
+	j.pass[req.CheckHash] = tp != "" && !again // throwaway prompts ("ok 3") have no topic and fail
+	return api.PromptCheckResp{CheckHash: req.CheckHash}, 200, nil
 }
 
 func (j *topicJudge) last(t *testing.T, prompt string) api.PromptCheckReq {
@@ -544,7 +489,6 @@ func TestUndoFarmingPaths(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	passed := func(f *fixture, h string) bool { p, _ := f.st.CheckPasses(); return p[h] }
 	ask := func(t *testing.T, f *fixture, at time.Duration, sess, text string) event.Event {
 		p := f.emit(t, at, event.Event{Kind: event.Prompt, Text: text, SessionID: sess})
 		f.emit(t, at+time.Minute, event.Event{Kind: event.AgentStop, SessionID: sess, Extra: map[string]any{promptcheck.ReplyKey: "done"}})
@@ -559,9 +503,9 @@ func TestUndoFarmingPaths(t *testing.T) {
 		p := ask(t, f, 10*time.Minute, "s2", again)
 		drain(t, f, j, 15*time.Minute)
 		r := j.last(t, again)
-		if passed(f, p.CheckHash) || r.Turn.PrevReply != promptcheck.NewChat || strings.Contains(r.Turn.Activity, "start of session") ||
+		if j.pass[p.CheckHash] || r.Turn.PrevReply != promptcheck.NewChat || strings.Contains(r.Turn.Activity, "start of session") ||
 			!strings.Contains(r.Turn.Activity, "time since the AI finished: 9m00s") || len(r.Context) != 1 || r.Context[0].CheckHash == "" {
-			t.Fatalf("passed %v; request %+v", passed(f, p.CheckHash), r.Turn)
+			t.Fatalf("passed %v; request %+v", j.pass[p.CheckHash], r.Turn)
 		}
 	})
 	t.Run("six throwaway prompts then rewind and resend", func(t *testing.T) {
@@ -575,8 +519,10 @@ func TestUndoFarmingPaths(t *testing.T) {
 		p := ask(t, f, 30*time.Minute, "s1", again)
 		drain(t, f, j, 35*time.Minute)
 		r := j.last(t, again)
-		if passed(f, p.CheckHash) || len(r.Context) != 6 || len(r.Earlier) != 1 || topic(r.Earlier[0].Prompt) != "score" || r.Earlier[0].CheckHash == "" {
-			t.Fatalf("passed %v; context %d, earlier %+v", passed(f, p.CheckHash), len(r.Context), r.Earlier)
+		// the device sends every checked prompt before the context turns;
+		// the server keeps the one it passed
+		if j.pass[p.CheckHash] || len(r.Context) != 6 || len(r.Earlier) != 1 || topic(r.Earlier[0].Prompt) != "score" || r.Earlier[0].CheckHash == "" {
+			t.Fatalf("passed %v; context %d, earlier %+v", j.pass[p.CheckHash], len(r.Context), r.Earlier)
 		}
 	})
 	t.Run("seven-ask cycle replayed", func(t *testing.T) {
@@ -589,7 +535,7 @@ func TestUndoFarmingPaths(t *testing.T) {
 		again := "can the snake game get TOPIC-menu now"
 		p := ask(t, f, 40*time.Minute, "s1", again)
 		drain(t, f, j, 45*time.Minute)
-		if passed(f, p.CheckHash) {
+		if j.pass[p.CheckHash] {
 			t.Fatalf("the replayed ask passed; earlier %d", len(j.last(t, again).Earlier))
 		}
 	})
@@ -600,7 +546,7 @@ func TestUndoFarmingPaths(t *testing.T) {
 		fresh := "make the snake wrap around the edges TOPIC-wrap"
 		p := ask(t, f, 10*time.Minute, "s2", fresh)
 		drain(t, f, j, 15*time.Minute)
-		if !passed(f, p.CheckHash) || j.last(t, fresh).Turn.PrevReply != promptcheck.NewChat {
+		if !j.pass[p.CheckHash] || j.last(t, fresh).Turn.PrevReply != promptcheck.NewChat {
 			t.Fatal("an honest new chat failed")
 		}
 	})

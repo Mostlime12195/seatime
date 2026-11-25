@@ -95,11 +95,10 @@ func TestOffThenOnHalfway(t *testing.T) {
 	if n, err := checks.Drain(context.Background(), f.st, "dev1", srv.send, f.t0.Add(90*time.Minute), 20); n != 1 || err != nil {
 		t.Fatalf("%d %v", n, err)
 	}
-	// all checked: the stretch counts by the check; the failing prompt's
-	// minutes are gone
-	t.Logf("plain %v s", plain)
-	if got := credit(t, f); got >= plain || got < 4*60 {
-		t.Fatalf("checked: %v s, plain was %v s", got, plain)
+	// all checked: the stretch counts by the check, and the server counts
+	// its prompts, not the device
+	if got := credit(t, f); got != 0 {
+		t.Fatalf("checked: %v s on the device, plain was %v s", got, plain)
 	}
 	if set := stats.PromptChecks(f.st); set == nil || !set.OnAt(f.t0.Add(time.Minute)) || !set.OnAt(f.t0.Add(30*time.Minute)) {
 		t.Fatalf("the stretch did not switch: %+v", set)
@@ -237,7 +236,7 @@ func TestBacklogAtServerPace(t *testing.T) {
 		}
 		inWindow++
 		sent++
-		return api.PromptCheckResp{CheckHash: req.CheckHash, Pass: true}, 200, nil
+		return api.PromptCheckResp{CheckHash: req.CheckHash}, 200, nil
 	}
 	for round := 0; round < 10000; round++ {
 		if q, _ := f.st.QueuedChecks(); q == 0 {
@@ -286,8 +285,8 @@ func TestModelFailureRetriesLater(t *testing.T) {
 	if n, err := checks.Drain(context.Background(), f.st, "dev1", srv.send, now, 20); n != 1 || err != nil {
 		t.Fatalf("%d %v", n, err)
 	}
-	if pass, _ := f.st.CheckPasses(); !pass[p.CheckHash] {
-		t.Fatal("no verdict after the failures")
+	if pass, _ := f.st.CheckPasses(); len(pass) != 1 {
+		t.Fatalf("no answer for %s after the failures", p.CheckHash)
 	}
 }
 

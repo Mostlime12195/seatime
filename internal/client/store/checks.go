@@ -270,10 +270,10 @@ func (s *Store) TurnsBeforeProject(project string, t time.Time, id int64, n int)
 	return out, rows.Err()
 }
 
-// PassedBefore are up to n turns of a project before t whose prompt
-// passed its check, not among skip (ids), oldest first.
-func (s *Store) PassedBefore(project string, t time.Time, skip []int64, n int) ([]CheckTurn, error) {
-	q := `SELECT ` + turnCols + ` FROM check_turns WHERE project=? AND prompt_ts<? AND state=? AND check_hash IN (SELECT check_hash FROM check_verdicts WHERE pass=1)`
+// CheckedBefore are up to n turns of a project before t whose prompt
+// was checked, not among skip (ids), oldest first.
+func (s *Store) CheckedBefore(project string, t time.Time, skip []int64, n int) ([]CheckTurn, error) {
+	q := `SELECT ` + turnCols + ` FROM check_turns WHERE project=? AND prompt_ts<? AND state=? AND check_hash IN (SELECT check_hash FROM check_verdicts WHERE model NOT LIKE 'closed by the server%' AND model NOT LIKE 'refused by the server%')`
 	args := []any{project, t.UnixMilli(), TurnDone}
 	for _, id := range skip {
 		q += ` AND id<>?`

@@ -66,6 +66,8 @@ type Segments interface {
 	SegmentBundle(ctx context.Context, id string) ([]byte, error)
 	// ListSegments are a user's segments of one project (or all, 0), oldest first.
 	ListSegments(ctx context.Context, userID, projectID int64) ([]Segment, error)
+	// AllSegments are every user's segments, oldest first.
+	AllSegments(ctx context.Context) ([]Segment, error)
 	// CheckedUpTo is, for each of a user's projects, the end of the last
 	// segment that did not fail.
 	CheckedUpTo(ctx context.Context, userID int64) (map[int64]time.Time, error)
@@ -80,7 +82,8 @@ type Segments interface {
 	// VerifiedMinutes are a project's credited minutes in [from, to) from
 	// verified segments, merged by minute.
 	VerifiedMinutes(ctx context.Context, projectID int64, from, to time.Time) ([]SegmentMinute, error)
-	// SegmentMinutesOf are one segment's credited minutes, in order.
+	// SegmentMinutesOf are one segment's credited minutes, in order, with
+	// the hand part of each and its seconds by model.
 	SegmentMinutesOf(ctx context.Context, segmentID string) ([]SegmentMinute, error)
 	// VerifiedModels are those minutes' seconds, and their prompts, by model.
 	VerifiedModels(ctx context.Context, projectID int64, from, to time.Time) ([]ModelSum, error)
@@ -212,6 +215,10 @@ func (s *DB) ListSegments(ctx context.Context, uid, pid int64) ([]Segment, error
 	return s.listSegs(ctx, `SELECT `+segCols+segFrom+`WHERE s.user_id=? AND s.project_id=? ORDER BY s.created, s.id`, uid, pid)
 }
 
+func (s *DB) AllSegments(ctx context.Context) ([]Segment, error) {
+	return s.listSegs(ctx, `SELECT `+segCols+segFrom+`ORDER BY s.created, s.id`)
+}
+
 func (s *DB) CheckedUpTo(ctx context.Context, uid int64) (map[int64]time.Time, error) {
 	rows, err := s.rows(ctx, `SELECT project_id, MAX(last_ts) FROM segments WHERE user_id=? AND status<>'failed' GROUP BY project_id`, uid)
 	if err != nil {
@@ -290,7 +297,40 @@ func (s *DB) SegmentMinutesOf(ctx context.Context, segmentID string) ([]SegmentM
 		}
 		out = append(out, x)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// the hand part of each minute and its seconds by model (segment_models)
+	at := map[int64]*SegmentMinute{}
+	for i := range out {
+		at[out[i].StartMin] = &out[i]
+	}
+	mr, err := s.rows(ctx, `SELECT start_min, hand, model, seconds, prompts FROM segment_models WHERE segment_id=? ORDER BY start_min, hand, model`, segmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer mr.Close()
+	for mr.Next() {
+		var sm int64
+		var hand, prompts int
+		var model string
+		var sec float64
+		if err := mr.Scan(&sm, &hand, &model, &sec, &prompts); err != nil {
+			return nil, err
+		}
+		x := at[sm]
+		switch {
+		case x == nil:
+		case hand != 0:
+			x.Hand += sec
+		default:
+			x.Prompts += prompts
+			if model != "" {
+				x.Models = append(x.Models, ledger.ModelUse{Model: model, Seconds: sec, Prompts: prompts})
+			}
+		}
+	}
+	return out, mr.Err()
 }
 
 func (s *DB) SetProjectPulled(ctx context.Context, pid int64) error {

@@ -14,6 +14,7 @@ import (
 	"seatime/internal/server/store"
 	"seatime/pkg/api"
 	"seatime/pkg/audit"
+	"seatime/pkg/ledger"
 )
 
 // Continuous verification. A device uploads each project's records once a
@@ -98,6 +99,9 @@ func (s *Server) handleSegment(w http.ResponseWriter, r *http.Request) {
 		s.log.Error("store segment", "err", err)
 		jsonErr(w, 500, "internal error")
 		return
+	}
+	if err := s.showChecked(ctx, sg, proj.Key, minutes); err != nil {
+		s.log.Error("show checked minutes", "err", err)
 	}
 	// the segment's commits go on the project page
 	var cs []store.Commit
@@ -224,7 +228,89 @@ func (s *Server) recheckSegment(ctx context.Context, sg *store.Segment) error {
 	if err != nil {
 		return err
 	}
-	return s.store.PutSegment(ctx, sg, nil, minutes)
+	if err := s.store.PutSegment(ctx, sg, nil, minutes); err != nil {
+		return err
+	}
+	proj, err := s.store.ProjectByID(ctx, sg.ProjectID)
+	if err != nil {
+		return err
+	}
+	return s.showChecked(ctx, sg, proj.Key, minutes)
+}
+
+// segDevice is the device id under which a segment's minutes, as the server
+// counted them, are kept among the synced minutes (showChecked).
+func segDevice(segmentID string) string { return store.SegDevicePrefix + segmentID }
+
+// showChecked puts a segment's minutes, as the server counted them, where
+// the site reads counted time: among the minutes that devices sync, under a
+// device id of the segment's own, so that no device's sync changes them.
+// With the prompt check on, a device does not know which prompts count and
+// syncs hand time only; the AI time of a stretch of work appears here, once
+// its records have been checked. Readers take the largest duration of a
+// minute's rows, and the counts (prompts, edits, commits, runs) stay the
+// device's. A segment that fails shows none.
+func (s *Server) showChecked(ctx context.Context, sg *store.Segment, key string, minutes []store.SegmentMinute) error {
+	var out []ledger.Bucket
+	if sg.Status != store.SegFailed {
+		for _, m := range minutes {
+			if m.Human <= 0 && m.Dark <= 0 {
+				continue
+			}
+			hand := min(m.Hand, m.Human)
+			nb := ledger.Bucket{Project: key, Start: time.Unix(m.StartMin*60, 0).UTC(), CodingSeconds: hand, AISeconds: m.Human - hand, AINotCountedSeconds: m.Dark}
+			for _, u := range m.Models {
+				if u.Seconds > 0 {
+					nb.Models = append(nb.Models, ledger.ModelUse{Model: u.Model, Seconds: u.Seconds})
+				}
+			}
+			out = append(out, nb)
+		}
+	}
+	dev := segDevice(sg.ID)
+	if !sg.FirstTS.IsZero() {
+		if err := s.store.DeleteBuckets(ctx, sg.UserID, dev, sg.FirstTS.Add(-time.Hour).Truncate(time.Minute), sg.LastTS.Add(time.Hour), out); err != nil {
+			return err
+		}
+	}
+	return s.store.UpsertBuckets(ctx, sg.UserID, dev, out)
+}
+
+// showAllChecked runs showChecked over every stored segment: segments
+// checked before the server kept their minutes among the synced ones. It
+// writes nothing for a segment whose minutes are there already.
+func (s *Server) showAllChecked(ctx context.Context) {
+	sgs, err := s.store.AllSegments(ctx)
+	if err != nil {
+		s.log.Error("show checked minutes", "err", err)
+		return
+	}
+	keys := map[int64]string{}
+	n := 0
+	for i := range sgs {
+		sg := &sgs[i]
+		if ctx.Err() != nil {
+			return
+		}
+		key, ok := keys[sg.ProjectID]
+		if !ok {
+			p, err := s.store.ProjectByID(ctx, sg.ProjectID)
+			if err != nil {
+				continue
+			}
+			key, keys[sg.ProjectID] = p.Key, p.Key
+		}
+		minutes, err := s.store.SegmentMinutesOf(ctx, sg.ID)
+		if err == nil {
+			err = s.showChecked(ctx, sg, key, minutes)
+		}
+		if err != nil {
+			s.log.Error("show checked minutes", "segment", sg.ID, "err", err)
+			continue
+		}
+		n++
+	}
+	s.log.Info("checked minutes shown", "segments", n)
 }
 
 // recheckUser counts the user's pending segments again, after settling the

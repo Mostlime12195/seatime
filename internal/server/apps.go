@@ -28,7 +28,9 @@ type projStatus struct {
 	// Verified and Dark are checked seconds in the range; Pending is synced
 	// time in the range that no checked segment covers yet.
 	Verified, Dark, Pending float64
-	Minutes                 []store.SegmentMinute
+	// PendingPrompts are the prompts sent in that unchecked time.
+	PendingPrompts int
+	Minutes        []store.SegmentMinute
 }
 
 // projectStatus works out a project's checked hours in [from, to) and its status.
@@ -69,12 +71,13 @@ func (s *Server) projectStatus(ctx context.Context, u *store.User, p *store.Proj
 		pf = ps.AsOf.Add(time.Minute).Truncate(time.Minute)
 	}
 	if pf.Before(to) {
-		bs, err := s.store.Buckets(ctx, u.ID, p.ID, pf, to)
+		bs, err := s.store.SyncedBuckets(ctx, u.ID, p.ID, pf, to)
 		if err != nil {
 			return ps, err
 		}
 		for _, b := range bs {
 			ps.Pending += b.Seconds()
+			ps.PendingPrompts += b.Prompts
 		}
 	}
 	closed, err := s.store.ClosedPromptCount(ctx, p.ID)

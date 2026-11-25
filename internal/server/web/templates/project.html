@@ -77,7 +77,7 @@
   <div class="sec-b">
   <dl class="kv">
     <dt>Checked</dt><dd>{{dur .Check.Verified}}{{if not .Check.AsOf.IsZero}}, up to {{ago .Check.AsOf}}{{end}}</dd>
-    {{if ge .Check.Pending 60.0}}<dt>Unchecked</dt><dd>{{dur .Check.Pending}}, checked about 3 hours after you stop</dd>{{end}}
+    {{$u := unck .Check.Pending .Check.PendingPrompts}}{{if $u}}<dt>Unchecked</dt><dd>{{$u}}, checked about 3 hours after you stop</dd>{{end}}
     <dt>Status</dt><dd>{{if eq .Check.Status "verified"}}verified{{else if eq .Check.Status "pending"}}pending: {{.Check.Reason}}{{else}}<span class="bad">failed: {{.Check.Reason}}</span>{{end}}</dd>
   </dl>
   </div>

@@ -150,6 +150,7 @@ func (s *Server) SetClock(now func() time.Time) {
 // Start launches background workers; they stop when ctx is cancelled.
 func (s *Server) Start(ctx context.Context) {
 	go s.recheckLoop(ctx)
+	go s.showAllChecked(ctx)
 	go s.purgeLoop(ctx)
 }
 

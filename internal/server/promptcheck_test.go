@@ -205,11 +205,12 @@ func TestPromptCheckKeepsLabelsNotText(t *testing.T) {
 	}
 	var resp api.PromptCheckResp
 	json.Unmarshal(out2, &resp)
-	if !resp.Pass || resp.Minutes != 10 || resp.CheckHash != req.CheckHash {
+	if resp.CheckHash != req.CheckHash {
 		t.Fatalf("%+v", resp)
 	}
-	// the device learns the decision and the minutes, not what was asked or answered
-	for _, w := range []string{"labels", "kind", "model", "adds", "about", "big", "unseen", "liquid"} {
+	// the device learns that the prompt was checked: not the decision, the
+	// minutes, or what was asked and answered
+	for _, w := range []string{"pass", "minutes", "rules", "labels", "kind", "model", "adds", "about", "big", "unseen", "liquid"} {
 		if strings.Contains(string(out2), w) {
 			t.Fatalf("the answer to the device names %q: %s", w, out2)
 		}
@@ -235,18 +236,18 @@ func TestPromptCheckKeepsLabelsNotText(t *testing.T) {
 	var resp3 api.PromptCheckResp
 	json.Unmarshal(out3, &resp3)
 	v3, _ := e.st.PromptVerdict(context.Background(), d.id, measured.CheckHash)
-	if _, asked := j.qs["unseen"]; code != 200 || !asked || resp3.Pass || v3 == nil || !v3.Labels["unseen"] {
+	if _, asked := j.qs["unseen"]; code != 200 || !asked || resp3.CheckHash != measured.CheckHash || v3 == nil || v3.Pass || !v3.Labels["unseen"] {
 		t.Fatalf("measured: %d %+v %+v", code, resp3, v3)
 	}
 	// a retry gets the stored verdict; the model is not asked again
-	if code, out := e.apiDo("POST", "/api/v1/prompt-check", d.token, req); code != 200 || j.calls != 2 || !strings.Contains(string(out), `"pass":true`) {
+	if code, out := e.apiDo("POST", "/api/v1/prompt-check", d.token, req); code != 200 || j.calls != 2 || !strings.Contains(string(out), req.CheckHash) {
 		t.Fatalf("retry: %d %s, %d calls", code, out, j.calls)
 	}
 	// a device older than the project facts sends none and is judged all
 	// the same; facts past the caps are cut, not refused
 	oldDev := checkReq(d, "PROMPT-CANARY from a device that sends no project facts")
 	oldDev.Project = nil
-	if code, out := e.apiDo("POST", "/api/v1/prompt-check", d.token, oldDev); code != 200 || j.calls != 3 || !strings.Contains(string(out), `"pass":true`) ||
+	if code, out := e.apiDo("POST", "/api/v1/prompt-check", d.token, oldDev); code != 200 || j.calls != 3 || !strings.Contains(string(out), oldDev.CheckHash) ||
 		!strings.HasPrefix(j.states[2], "=== PROJECT (") || !strings.Contains(j.states[2], "(the tracker sent no facts about the project)\n=== END OF PROJECT ===") || strings.Contains(j.states[2], "PROJECT NAME") {
 		t.Fatalf("older device: %d %s\n%s", code, out, j.states[len(j.states)-1])
 	}

@@ -347,6 +347,11 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 	lateFloor := now.Add(-time.Duration(s.pol().LateDays * float64(24*time.Hour)))
 	var stale []ledger.Bucket
 	var struggle float64
+	// With the prompt check on, AI time is the server's to count. A device
+	// does not know which prompts count, so whatever AI time it sends is
+	// dropped here; the AI time of a stretch of work appears when its
+	// records are checked (showChecked). Hand time and the counts are kept.
+	aiLater := s.pol().PromptCheck
 	for _, b := range req.Buckets {
 		if !validBucket(b, now) {
 			skipped++
@@ -363,6 +368,12 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 			b.Harnesses[i] = strings.ReplaceAll(b.Harnesses[i], ",", "_")
 		}
 		b.Models = cleanModels(b)
+		if aiLater {
+			b.AISeconds, b.AINotCountedSeconds = 0, 0
+			for i := range b.Models {
+				b.Models[i].Seconds = 0
+			}
+		}
 		switch {
 		case b.Start.Before(lowFloor) && b.Start.Before(lateFloor):
 			late++

@@ -168,13 +168,6 @@ func (s *Syncer) Next() (plan Plan, ok bool, err error) {
 			for _, e := range newCommits {
 				s.mapKey(e.Project, &req, seen)
 			}
-			if s.Store.PromptCheckOn() {
-				req.Pending = &api.PendingTime{}
-				pend, _ := stats.PendingByProject(s.Store, now.Add(-24*time.Hour), now)
-				for p, sec := range pend {
-					req.Pending.Projects = append(req.Pending.Projects, api.ProjectPending{Project: s.mapKey(p, &req, seen), Seconds: sec})
-				}
-			}
 		}
 		plan.Requests = append(plan.Requests, req)
 		if !wEnd.Before(to) {

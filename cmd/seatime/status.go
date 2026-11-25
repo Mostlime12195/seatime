@@ -88,7 +88,7 @@ func cmdStatus(args []string) error {
 		fmt.Printf("prompt check: off; %d prompts are kept here and are checked when it is back on, or when the server asks for them\n", queued)
 	}
 	if x, _ := st.ExpiredChecks(); x > 0 {
-		fmt.Printf("prompt check: %d prompts waited too long and were never checked; their time stays pending\n", x)
+		fmt.Printf("prompt check: %d prompts waited too long and were never checked\n", x)
 	}
 	for _, line := range silentLines(st) {
 		fmt.Println("warning:   ", s.orange(line))
@@ -175,15 +175,13 @@ func writeToday(w io.Writer, s styler, sm stats.Summary) {
 	if sm.Longest > 0 {
 		fmt.Fprintf(w, "\n  longest focused stretch: %s\n", stats.Dur(sm.Longest.Seconds()))
 	}
-	if sm.AINotCounted > 0 {
-		why := fmt.Sprintf("more than %g min after your last edit or new prompt", ledger.Window.Minutes())
-		if sm.CheckOn {
-			why = "an agent running on its own, past the minutes of your prompts"
-		}
-		fmt.Fprintf(w, "  %s\n", s.dim(fmt.Sprintf("agent time not counted today: %s (%s)", stats.Dur(sm.AINotCounted), why)))
-	}
-	if sm.PendingToday > 0 {
-		fmt.Fprintf(w, "  %s\n", s.dim(fmt.Sprintf("waiting for the prompt check: %s (counts once the check passes the prompts behind it)", stats.Dur(sm.PendingToday))))
+	switch {
+	case sm.CheckOn:
+		// the server counts AI time, when the records of a stretch of work
+		// reach it: this computer knows hand time only
+		fmt.Fprintf(w, "  %s\n", s.dim("this is your hand time. Time with AI tools is counted by the server and shows on the site about 3 hours after you stop."))
+	case sm.AINotCounted > 0:
+		fmt.Fprintf(w, "  %s\n", s.dim(fmt.Sprintf("agent time not counted today: %s (more than %g min after your last edit or new prompt)", stats.Dur(sm.AINotCounted), ledger.Window.Minutes())))
 	}
 }
 

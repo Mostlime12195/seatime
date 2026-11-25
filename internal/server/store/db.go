@@ -1147,8 +1147,20 @@ func (s *DB) DaySums(ctx context.Context, uid, pid, fromDay, toDay int64, offset
 }
 
 func (s *DB) Buckets(ctx context.Context, uid, pid int64, from, to time.Time) ([]ledger.Bucket, error) {
+	return s.buckets(ctx, uid, pid, from, to, "")
+}
+
+// SegDevicePrefix starts the device id of the rows the server writes for a
+// checked segment's minutes (the server's showChecked).
+const SegDevicePrefix = "seg:"
+
+func (s *DB) SyncedBuckets(ctx context.Context, uid, pid int64, from, to time.Time) ([]ledger.Bucket, error) {
+	return s.buckets(ctx, uid, pid, from, to, ` AND device_id NOT LIKE '`+SegDevicePrefix+`%'`)
+}
+
+func (s *DB) buckets(ctx context.Context, uid, pid int64, from, to time.Time, where string) ([]ledger.Bucket, error) {
 	rows, err := s.rows(ctx, `SELECT project_id,start_min,MAX(human),MAX(struggle),MAX(dark_flow),MAX(agent),SUM(prompts),SUM(edits),SUM(commits),SUM(runs),string_agg(harnesses,',')
-FROM buckets WHERE user_id=? AND project_id=? AND start_min>=? AND start_min<? GROUP BY project_id,start_min ORDER BY start_min`, uid, pid, from.Unix()/60, to.Unix()/60)
+FROM buckets WHERE user_id=? AND project_id=? AND start_min>=? AND start_min<?`+where+` GROUP BY project_id,start_min ORDER BY start_min`, uid, pid, from.Unix()/60, to.Unix()/60)
 	if err != nil {
 		return nil, err
 	}

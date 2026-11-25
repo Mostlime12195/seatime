@@ -304,11 +304,13 @@ func Request(st *store.Store, deviceID string, t store.CheckTurn, live []event.E
 		ids = append(ids, c.ID)
 	}
 	if n := st.MetaInt(store.MetaEarlier, Earlier); n > 0 {
-		passed, err := st.PassedBefore(t.Project, t.PromptTS, ids, n)
+		// the device does not know which of them counted: the server keeps
+		// those it passed, so it gets more than it will show the judge
+		earlier, err := st.CheckedBefore(t.Project, t.PromptTS, ids, min(3*n, 60))
 		if err != nil {
 			return api.PromptCheckReq{}, err
 		}
-		for _, e := range passed {
+		for _, e := range earlier {
 			req.Earlier = append(req.Earlier, promptcheck.Turn{Prompt: e.Prompt, CheckHash: e.CheckHash, Salt: e.Salt})
 		}
 	}
@@ -397,14 +399,8 @@ func Drain(ctx context.Context, st *store.Store, deviceID string, send Sender, n
 		resp, status, err := send(ctx, req)
 		switch {
 		case err == nil && resp.CheckHash == t.CheckHash:
-			v := promptcheck.Verdict{Pass: resp.Pass, Minutes: resp.Minutes, Rules: resp.Rules}
-			if err := st.CheckDone(t.ID, t.CheckHash, v); err != nil {
+			if err := st.CheckDone(t.ID, t.CheckHash, promptcheck.Verdict{}); err != nil {
 				return done, err
-			}
-			if resp.Pass { // the minutes it covers may already be synced: recount them
-				if err := st.NoteResync(t.PromptTS); err != nil {
-					return done, err
-				}
 			}
 			done++
 		case status == 404:

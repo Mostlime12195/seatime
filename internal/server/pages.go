@@ -183,6 +183,9 @@ type profileView struct {
 	// Unchecked is counted time that the server has not checked yet, in
 	// seconds. It is part of the totals.
 	Unchecked float64
+	// UncheckedPrompts are the prompts sent in that time. With the prompt
+	// check on, their time is counted when the server checks them.
+	UncheckedPrompts int
 }
 
 // visible: public profiles and your own.
@@ -316,7 +319,7 @@ func (s *Server) profileView(ctx context.Context, owner, viewer *store.User, rg 
 			pv.Models = modelRows(ms, pv.RangeTotal)
 		}
 	}
-	pv.Unchecked = s.unchecked(ctx, owner.ID, all, now)
+	pv.Unchecked, pv.UncheckedPrompts = s.unchecked(ctx, owner.ID, all, now)
 	for _, x := range all {
 		pv.AllStruggle += x.Struggle
 		if x.Project.Hidden && !pv.IsOwner {
@@ -869,31 +872,47 @@ func byTool(bs []ledger.Bucket) (timeSplit, []toolRow) {
 }
 
 // unchecked is a user's counted time, in seconds, after the last segment
-// that the server checked in each project (projectStatus's Pending, over
-// all of the projects in sums).
-func (s *Server) unchecked(ctx context.Context, userID int64, sums []store.ProjectSum, now time.Time) float64 {
+// that the server checked in each project, and the prompts sent in it
+// (projectStatus's Pending and PendingPrompts, over all of the projects in
+// sums).
+func (s *Server) unchecked(ctx context.Context, userID int64, sums []store.ProjectSum, now time.Time) (sec float64, prompts int) {
 	upTo, err := s.store.CheckedUpTo(ctx, userID)
 	if err != nil {
-		return 0
+		return 0, 0
 	}
-	var sec float64
 	for _, x := range sums {
 		from := time.Unix(0, 0)
 		if t, ok := upTo[x.Project.ID]; ok {
 			from = t.Add(time.Minute).Truncate(time.Minute)
 		}
-		if !x.LastStart.Add(time.Hour).After(from) { // LastStart is the hour of the last counted minute
+		if !x.LastStart.Add(time.Hour).After(from) { // LastStart is the hour of the last minute with anything in it
 			continue
 		}
-		bs, err := s.store.Buckets(ctx, userID, x.Project.ID, from, now)
+		bs, err := s.store.SyncedBuckets(ctx, userID, x.Project.ID, from, now)
 		if err != nil {
 			continue
 		}
 		for _, b := range bs {
 			sec += b.Seconds()
+			prompts += b.Prompts
 		}
 	}
-	return sec
+	return sec, prompts
+}
+
+// uncheckedLabel says what is not checked yet: "12m", "3 prompts" or
+// "12m + 3 prompts"; "" when there is under a minute and no prompt.
+func uncheckedLabel(sec float64, prompts int) string {
+	var parts []string
+	if sec >= 60 {
+		parts = append(parts, fmtDur(sec))
+	}
+	if prompts == 1 {
+		parts = append(parts, "1 prompt")
+	} else if prompts > 1 {
+		parts = append(parts, strconv.Itoa(prompts)+" prompts")
+	}
+	return strings.Join(parts, " + ")
 }
 
 // pendingMin is a user's time waiting for the prompt check, as their

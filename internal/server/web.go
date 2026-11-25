@@ -108,6 +108,7 @@ func ago(t time.Time) string {
 func loadPages(s *Server) (*pages, error) {
 	funcs := template.FuncMap{
 		"dur":  fmtDur,
+		"unck": uncheckedLabel,
 		"durx": fmtDurHTML,
 		// a flag reads "code: detail"; the page sets the two apart
 		"flagk": func(f string) string { k, _, _ := strings.Cut(f, ": "); return k },

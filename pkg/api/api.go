@@ -185,15 +185,10 @@ type PromptCheckReq struct {
 }
 
 type PromptCheckResp struct {
+	// CheckHash says that the prompt was checked. Whether it counts, and
+	// for how long, stays on the server: the server counts a prompt's time
+	// itself when the records of that stretch of work arrive (segments).
 	CheckHash string `json:"check_hash"`
-	Pass      bool   `json:"pass"`
-	// Minutes is how long the prompt may count when it passed, from the
-	// server's rules when it was judged. A device counts with it, so the
-	// server can change the minutes without a client release. The answers
-	// behind the decision stay on the server.
-	Minutes float64 `json:"minutes,omitempty"`
-	// Rules names the rules the verdict was judged with.
-	Rules string `json:"rules,omitempty"`
 }
 
 // ---- segments: a project's records, checked as they arrive ----

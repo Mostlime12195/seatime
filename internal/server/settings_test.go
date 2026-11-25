@@ -118,7 +118,7 @@ func TestJudgeFallbackAndOutage(t *testing.T) {
 	var resp api.PromptCheckResp
 	json.Unmarshal(out, &resp)
 	stored, _ := e.st.PromptVerdict(context.Background(), d.id, req.CheckHash)
-	if code != 200 || !resp.Pass || stored == nil || stored.Model != "backup/model-test" || len(j.targets) != 2 || j.targets[1].URL != "https://b.example/decisions" || j.targets[0].URL != "https://a.example/decisions" {
+	if code != 200 || resp.CheckHash != req.CheckHash || stored == nil || !stored.Pass || stored.Model != "backup/model-test" || len(j.targets) != 2 || j.targets[1].URL != "https://b.example/decisions" || j.targets[0].URL != "https://a.example/decisions" {
 		t.Fatalf("fallback: %d %s %+v", code, out, j.targets)
 	}
 	j.down["backup/model"] = true
@@ -199,8 +199,9 @@ func TestRulesSettingSetsVerdictMinutes(t *testing.T) {
 	code, out := e.apiDo("POST", "/api/v1/prompt-check", d.token, second)
 	var resp api.PromptCheckResp
 	json.Unmarshal(out, &resp)
-	if code != 200 || resp.Minutes != 7 || resp.Rules != r.ID() {
-		t.Fatalf("new rules: %d %s", code, out)
+	edited, _ := e.st.PromptVerdict(ctx, d.id, second.CheckHash)
+	if code != 200 || resp.CheckHash != second.CheckHash || edited == nil || edited.Minutes != 7 || edited.Rules != r.ID() {
+		t.Fatalf("new rules: %d %s %+v", code, out, edited)
 	}
 	st := j.states[len(j.states)-1]
 	if strings.Count(st, "=== TURN") != 2 || !strings.Contains(st, "LAST-CONTEXT") || strings.Contains(st, strings.Repeat("make the board bigger ", 20)) {

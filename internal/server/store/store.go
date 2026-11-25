@@ -220,6 +220,9 @@ type Store interface {
 	DeviceBuckets(ctx context.Context, userID int64, deviceID string, from, to time.Time) ([]ledger.Bucket, error)
 	DaySums(ctx context.Context, userID int64, projectID int64, fromDay, toDay int64, offsetMin int) ([]DaySum, error)
 	Buckets(ctx context.Context, userID, projectID int64, from, to time.Time) ([]ledger.Bucket, error)
+	// SyncedBuckets are Buckets from the rows that devices synced only:
+	// without the minutes the server wrote for a checked segment.
+	SyncedBuckets(ctx context.Context, userID, projectID int64, from, to time.Time) ([]ledger.Bucket, error)
 	ProjectSums(ctx context.Context, userID int64, from, to time.Time) ([]ProjectSum, error)
 	// ModelSums splits ProjectSums' counted seconds, and the prompts, by model.
 	ModelSums(ctx context.Context, userID, projectID int64, from, to time.Time) ([]ModelSum, error)

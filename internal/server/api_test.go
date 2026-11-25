@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -271,8 +272,10 @@ func TestSyncIdempotentAndStats(t *testing.T) {
 	}
 	// the 80 s are not checked yet, and the pages say so
 	for _, path := range []string{"/", "/@bob", "/@bob/app"} {
-		if _, body := br.get(path); !strings.Contains(body, fmtDur(80)+" unchecked") && !strings.Contains(body, "<dt>Unchecked</dt><dd>"+fmtDur(80)) {
-			t.Errorf("%s does not label the unchecked time", path)
+		_, body := br.get(path)
+		m := regexp.MustCompile(`(?:<span class="seal">|<dt>Unchecked</dt><dd>)([^<]*)`).FindStringSubmatch(body)
+		if m == nil || !strings.HasPrefix(html.UnescapeString(m[1]), fmtDur(80)+" + ") || !strings.Contains(m[1], " prompt") {
+			t.Errorf("%s does not label the unchecked time and prompts: %q", path, m)
 		}
 	}
 	// live fragment endpoint

@@ -83,7 +83,6 @@ func Summarize(st *store.Store, now time.Time, loc *time.Location, goalHours flo
 	if n, _ := st.Count(); n > 0 {
 		s.EverRecorded = true
 	}
-	s.PendingToday, _ = Pending(st, today, end)
 	for _, e := range evs {
 		if !e.Kind.Activity() {
 			continue
