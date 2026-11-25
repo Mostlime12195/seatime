@@ -1,0 +1,72 @@
+{{define "content"}}
+{{with .Data}}
+<header class="phead who">
+  <h1>{{if .Owner.DisplayName}}{{.Owner.DisplayName}}{{else}}{{.Owner.Username}}{{end}}</h1>
+  {{if .IsOwner}}<a class="btn small alt act" href="/settings">Settings</a>{{end}}
+  <p class="sub"><b>@{{.Owner.Username}}</b>
+    {{if .Owner.GitHub}}<a href="https://github.com/{{.Owner.GitHub}}" rel="noopener">github.com/{{.Owner.GitHub}}</a>{{end}}
+    {{if not .Owner.Public}}<span class="seal">private, only you can see this</span>{{end}}</p>
+</header>
+{{template "newprojects" .NewProjects}}
+{{template "ranges" $}}
+<div id="live" data-live="{{.LiveURL}}">{{template "live" $}}</div>
+{{end}}
+{{end}}
+
+{{define "live"}}{{with .Data}}
+<section class="gauge">
+  <div class="enso" role="img" aria-label="{{.GoalPct}}% of the daily goal of one hour" title="Daily goal: 1 hour">
+    <svg viewBox="0 0 200 200" aria-hidden="true">{{template "bezel"}}{{if .GoalPct}}<circle class="arc goal" cx="100" cy="100" r="80" pathLength="100" stroke-dasharray="{{.GoalPct}} 100" transform="rotate(-90 100 100)" stroke="url(#aqua)"/>{{end}}</svg>
+    <div class="enso-c"><b>{{durx .Today.Struggle}}</b><span>today</span></div>
+  </div>
+  <div class="readout">
+    <div class="cell"><b>{{durx .RangeTotal}}</b><span>{{.Range.Label}}</span></div>
+    <div class="cell"><b>{{durx .DailyAvg}}</b><span>daily average</span></div>
+    <div class="cell"><b>{{.Streak}}<i class="u">day{{if ne .Streak 1}}s{{end}}</i></b><span>streak (best {{.BestStreak}})</span></div>
+    <div class="cell"><b>{{hours .AllStruggle}}<i class="u">h</i></b><span>all time</span></div>
+  </div>
+</section>
+{{if ge .Unchecked 60.0}}<p class="unck"><span class="seal">{{dur .Unchecked}} unchecked</span><span>checked about 3 hours after {{if .IsOwner}}you stop{{else}}work stops{{end}}</span></p>{{end}}
+{{if .PendingMin}}<p class="sub">{{.PendingMin}} min waiting on check</p>{{end}}
+
+<section class="sec">
+  <header class="sec-h"><h2>Projects</h2><p>{{.Range.Label}}</p></header>
+  <div class="sec-b">
+  {{if .Cards}}
+  <ul class="plist">
+    {{range .Cards}}
+    <li><a href="/@{{$.Data.Owner.Username}}/{{.P.Slug}}?range={{$.Data.Range.Key}}">
+      <span class="pn">{{.P.Name}}{{if .P.Hidden}}<span class="seal">hidden</span>{{end}}</span>
+      <span class="pt">{{durx .Range}}</span>
+      <span class="share" aria-hidden="true"><i style="width:{{.Pct}}%"></i></span>
+      <span class="pm">{{.Pct}}% · {{dur .Total}} all time · {{.Commits}} commit{{if ne .Commits 1}}s{{end}} · last active {{ago .LastActive}}{{if .P.Repo}} · {{.P.Repo}}{{end}}</span>
+    </a></li>
+    {{end}}
+  </ul>
+  {{else}}<p class="verse">No projects yet. Install SeaTime with the line on the <a href="/">home page</a>, then write some code. Each repo you work in shows up here as a project.</p>{{end}}
+  </div>
+</section>
+
+{{if .Models}}<section class="sec">
+  <header class="sec-h"><h2>Models</h2><p>{{.Range.Label}}</p><details class="q"><summary aria-label="About models"></summary><div><p>Your counted time and prompts for each AI model, under the name the AI tool gave it. A prompt's time goes to the model that answered it. Time from hand edits has no model.</p><p>"Model not recorded" is AI time from before SeaTime kept the model, or from a tool that does not name its model. Only you see this section.</p></div></details></header>
+  <div class="sec-b">
+    <ul class="tools models">{{range .Models}}<li><span{{if .Title}} title="{{.Title}}"{{end}}>{{.Name}}</span><span class="share"><i class="{{.Class}}" style="width:{{.Pct}}%"></i></span><b>{{.Time}}</b><span class="np">{{if .Prompts}}{{.Prompts}} prompt{{if ne .Prompts 1}}s{{end}}{{end}}</span></li>{{end}}</ul>
+  </div>
+</section>{{end}}
+
+{{if .AllStruggle}}<section class="sec">
+  <header class="sec-h"><h2>Time per day</h2></header>
+  <div class="sec-b"><div class="scrollx end" tabindex="0" role="group" aria-label="Daily chart">{{safe .Bars}}</div></div>
+</section>
+
+<section class="sec">
+  <header class="sec-h"><h2>Last 26 weeks</h2></header>
+  <div class="sec-b">
+    <div class="scrollx end" tabindex="0" role="group" aria-label="Calendar of the last 26 weeks">{{safe .Heatmap}}</div>
+    <div class="legend"><span>less <svg viewBox="0 0 68 12" width="68" height="12" aria-hidden="true"><rect class="h0" x="0" y="0" width="12" height="12" rx="3"/><rect class="h1" x="14" y="0" width="12" height="12" rx="3"/><rect class="h2" x="28" y="0" width="12" height="12" rx="3"/><rect class="h3" x="42" y="0" width="12" height="12" rx="3"/><rect class="h4" x="56" y="0" width="12" height="12" rx="3"/></svg> more</span><span>best day <b>{{dur .BestDay}}</b></span></div>
+  </div>
+</section>{{end}}
+
+{{end}}{{end}}
+
+{{define "ranges"}}{{with .Data}}<nav class="ranges" aria-label="Range">{{range .Ranges}}<a href="?range={{.Key}}"{{if eq .Key $.Data.Range.Key}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</nav>{{end}}{{end}}

@@ -1,0 +1,20 @@
+{{define "content"}}
+<div class="gate">
+  <div class="enso" aria-hidden="true"><svg viewBox="0 0 200 200">{{template "bezel"}}<circle class="arc" cx="100" cy="100" r="80" pathLength="100" stroke-dasharray="100 100" transform="rotate(-90 100 100)" stroke="url(#aqua)"/></svg></div>
+  <h1>Sign in</h1>
+  {{if .Data.HCA}}<p><a class="btn wide" href="/auth/hackclub{{if ne .Data.Next "/"}}?next={{.Data.Next}}{{end}}">Continue with Hack Club</a></p>{{end}}
+  {{if .Data.GH}}<p><a class="btn wide alt" href="/auth/github{{if ne .Data.Next "/"}}?next={{.Data.Next}}{{end}}">Continue with GitHub</a></p>{{end}}
+  {{if and (not .Data.HCA) (not .Data.GH) (not .Data.Dev)}}<p class="muted">No login provider is configured on this server.</p>{{end}}
+  {{if .Data.Dev}}
+  <hr>
+  <form method="post" action="/auth/dev" class="stack">
+    <p class="eyebrow">Dev login (SEATIME_DEV=1): any username works.</p>
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="hidden" name="next" value="{{.Data.Next}}">
+    <label>Username <input name="username" required maxlength="40" autocomplete="off"></label>
+    <label>Role <select name="role"><option value="user">user</option><option value="admin">admin</option></select></label>
+    <button class="btn" type="submit">Dev sign in</button>
+  </form>
+  {{end}}
+</div>
+{{end}}

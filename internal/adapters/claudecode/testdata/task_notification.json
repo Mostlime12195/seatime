@@ -1,0 +1,1 @@
+{"session_id":"s1","transcript_path":"/home/u/.claude/projects/x/s1.jsonl","cwd":"/work/app","hook_event_name":"UserPromptSubmit","prompt":"<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n<summary>Background command finished</summary>\n</task-notification>"}

@@ -1,0 +1,1 @@
+{"session_id":"s1","cwd":"/work/app","hook_event_name":"PostToolUse","tool_name":"Edit","tool_input":{"file_path":"/work/app/src/login.ts","old_string":"a","new_string":"b"},"tool_response":{"filePath":"/work/app/src/login.ts","success":true},"tool_use_id":"toolu_1"}

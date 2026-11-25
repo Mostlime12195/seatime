@@ -1,0 +1,13 @@
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-20T10:00:00.010Z","sessionId":"s1","content":"add a dark mode toggle to the settings page"}
+{"type":"queue-operation","operation":"dequeue","timestamp":"2026-11-20T10:00:00.014Z","sessionId":"s1"}
+{"parentUuid":null,"type":"user","message":{"role":"user","content":"add a dark mode toggle to the settings page"},"uuid":"u1","timestamp":"2026-11-20T10:00:00.020Z","sessionId":"s1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Working on it."}]},"uuid":"a1","timestamp":"2026-11-20T10:00:03.000Z","sessionId":"s1"}
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-20T10:01:40.500Z","sessionId":"s1","content":"also keep the old colours behind a flag"}
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-20T10:01:41.000Z","sessionId":"other","content":"fix the failing login test"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Edit","input":{}}]},"uuid":"a2","timestamp":"2026-11-20T10:02:10.000Z","sessionId":"s1"}
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-20T10:02:30.000Z","sessionId":"s1","content":"then run the tests"}
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-20T10:02:50.000Z","sessionId":"s1","content":"and commit"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Done."}]},"uuid":"a3","timestamp":"2026-11-20T10:03:30.000Z","sessionId":"s1"}
+{"type":"queue-operation","operation":"dequeue","timestamp":"2026-11-20T10:03:31.000Z","sessionId":"s1"}
+{"type":"queue-operation","operation":"remove","timestamp":"2026-11-20T10:03:31.100Z","sessionId":"s1","content":"<task-notification>done</task-notification>","reason":"absorbed_mid_turn"}
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-20T10:04:00.000Z","sessionId":"s1","content":null}

@@ -1,0 +1,1 @@
+{"session_id":"s1","cwd":"/work/app","hook_event_name":"PostToolUseFailure","tool_name":"Bash","tool_input":{"command":"go test ./..."},"error":"Exit code 1\nFAIL seatime","tool_use_id":"toolu_3"}

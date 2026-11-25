@@ -1,0 +1,1 @@
+{"session_id":"g1","cwd":"/work/cli","hook_event_name":"AfterTool","tool_name":"replace","tool_input":{"file_path":"/work/cli/parse.go","old_string":"a","new_string":"b"},"tool_response":{"llmContent":"ok","returnDisplay":"diff"}}

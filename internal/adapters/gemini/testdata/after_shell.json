@@ -1,0 +1,1 @@
+{"session_id":"g1","cwd":"/work/cli","hook_event_name":"AfterTool","timestamp":"2026-11-19T15:04:09Z","tool_name":"run_shell_command","tool_input":{"command":"go test ./..."},"tool_response":{"llmContent":"Command: go test ./...\nDirectory: (root)\nStdout: FAIL\nExit Code: 1\nSignal: (none)","returnDisplay":"FAIL"}}

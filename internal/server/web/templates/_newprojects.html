@@ -1,0 +1,18 @@
+{{define "newprojects"}}{{with .}}
+<section class="sec" id="newprojects" data-newprojects>
+  <header class="sec-h"><h2>New on your profile</h2>
+    <details class="q"><summary aria-label="About new projects"></summary><div>These projects showed up in your last sync. Other people can see them on your profile. If you hide one, it stays off every public page, and its time still counts in your totals. You can change this later in <a href="/settings">Settings</a>.</div></details></header>
+  <div class="sec-b">
+  {{range .Projects}}
+  <form method="post" action="/settings/project/visibility" class="proj-row new" data-visibility>
+    <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="next" value="{{$.Next}}">
+    <div class="pname"><b>{{.Name}}</b><div>{{.Key}}</div></div>
+    <button class="btn small alt" type="submit" name="hidden" value="1">Hide</button>
+    <button class="btn small" type="submit" name="hidden" value="0">Keep public</button>
+    <span class="muted small" data-result role="status"></span>
+  </form>
+  {{end}}
+  </div>
+  <script src="/static/hide.js" defer></script>
+</section>
+{{end}}{{end}}

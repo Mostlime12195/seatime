@@ -1,0 +1,1 @@
+{"session_id":"s1","cwd":"/work/app","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"cd app && npm test"},"tool_response":{"stdout":"ok","stderr":"","interrupted":false,"isImage":false},"tool_use_id":"toolu_2"}

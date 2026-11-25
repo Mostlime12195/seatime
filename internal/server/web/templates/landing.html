@@ -1,0 +1,66 @@
+{{define "content"}}
+{{$c := .Data.Count}}
+{{if .Data.Deleted}}<p class="flash" role="status">Your SeaTime account is deleted. Your computers remove SeaTime the next time they check in.</p>{{end}}
+<section class="hero plain">
+  <div>
+    <h1>SeaTime</h1>
+    <p class="lead">An experimental time tracker for coding with AI.</p>
+    <p class="sub">Code by hand and your time counts the way that it does on Hackatime. Your time with AI tools counts too. {{if $c.CheckOn}}Each prompt that you send counts for up to {{$c.Most}} minutes, depending on how good it is.{{else}}Each new prompt counts for up to {{$c.Window}} minutes.{{end}} Time that an agent runs on its own does not count.</p>
+    <p class="sub"><a href="{{.Data.Repo}}/blob/main/docs/RULE.md">Read the full rule</a></p>
+    <p class="acts"><a class="btn" href="{{.Data.SignIn}}">Sign in with Hack Club</a><a class="btn alt" href="#start">Install</a></p>
+  </div>
+</section>
+
+<section class="sec half" id="start">
+  <header class="sec-h"><h2>Get started</h2></header>
+  <div class="sec-b">
+    <ol class="steps">
+      <li>Run the installer in a terminal. It opens your browser so that you can sign in with Hack Club.
+        <div class="cmd"><span class="label">macOS / Linux</span><div class="code"><pre tabindex="0"><code>curl -fsSL {{.BaseURL}}/install.sh | sh</code></pre></div></div>
+        <div class="cmd"><span class="label">Windows</span><div class="code ps"><pre tabindex="0"><code>irm {{.BaseURL}}/install.ps1 | iex</code></pre></div></div>
+      </li>
+      <li>Write some code. Your hours show up here within a few minutes.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="sec half" id="tools">
+  <header class="sec-h"><h2>Works with</h2></header>
+  <div class="sec-b prose">
+    <p>Claude Code, Cursor and Gemini CLI, tested with real installs. Codex CLI, opencode, GitHub Copilot, Windsurf, Antigravity, Kilo Code, Aider, Cline, Roo Code and Amp, built from their documentation. SeaTime finds them on its own.</p>
+    <p>Your editor too, if it has the WakaTime or Hackatime plugin.</p>
+  </div>
+</section>
+
+<section class="sec half" id="apps">
+  <header class="sec-h"><h2>Applications that read your hours</h2></header>
+  <div class="sec-b prose">
+    <p>Applications, such as the site of a Hack Club YSWS program, can read your hours from SeaTime the way that they read them from Hackatime. You do not submit anything.</p>
+    <p>Each application asks for your permission first. You can take it back in Settings.</p>
+  </div>
+</section>
+
+<section class="sec half" id="private">
+  <header class="sec-h"><h2>Privacy</h2></header>
+  <div class="sec-b prose">
+    <p>SeaTime sends your hours, the names of your projects, and hashes that nobody can read back. Your commands and file paths stay on your computer.</p>
+    {{if $c.CheckOn}}<p>Your code and your prompts stay there too, with one exception. To judge a new prompt, an AI model reads it with the chat and the code changes around it, and with the project's file names and the start of its README. SeaTime does not store any of this, and the provider of the model must not keep it.</p>{{else}}<p>Your code and your prompts stay there too.</p>{{end}}
+  </div>
+</section>
+
+<section class="sec" id="faq">
+  <header class="sec-h"><h2>Questions</h2></header>
+  <div class="sec-b faq">
+    <details><summary>Is my code private?</summary>
+      <p>Your code stays on your computer.{{if $c.CheckOn}} To judge a prompt, an AI model also reads the code change after it, the project's file names and the start of its README. SeaTime does not store them.{{end}}</p></details>
+    <details><summary>Does it replace Hackatime?</summary>
+      <p>No. If your editor has the WakaTime or Hackatime plugin, its time still goes to Hackatime as before. SeaTime adds your time with AI tools, which never goes to Hackatime.</p></details>
+    <details><summary>How do I stop SeaTime?</summary>
+      <p>In Settings, remove SeaTime from a computer. It takes its hooks out of your AI tools and stops there.</p></details>
+    <details><summary>Can I delete my data?</summary>
+      <p>Yes. In Settings you can delete your SeaTime account and everything in it. Your computers then remove SeaTime by themselves.</p></details>
+    <details><summary>Is it free and open source?</summary>
+      <p>Yes. The code is <a href="{{.Data.Repo}}">on GitHub</a> under the AGPLv3.</p></details>
+  </div>
+</section>
+{{end}}

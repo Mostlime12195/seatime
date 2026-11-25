@@ -1,0 +1,1 @@
+{"conversation_id":"cv1","generation_id":"g1","model":"claude-sonnet-5-5","hook_event_name":"afterFileEdit","workspace_roots":["/work/site"],"file_path":"/work/site/src/Nav.tsx","edits":[{"old_string":"a","new_string":"x\ny\nz"}]}

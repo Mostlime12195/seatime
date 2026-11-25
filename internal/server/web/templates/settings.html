@@ -1,0 +1,181 @@
+{{define "content"}}
+<header class="phead">
+  <h1>Settings</h1>
+</header>
+{{if .Data.Flash}}<p class="flash" role="status">{{.Data.Flash}}</p>{{end}}
+{{template "newprojects" .Data.NewProjects}}
+
+<section class="sec">
+  <header class="sec-h"><h2>Profile</h2></header>
+  <div class="sec-b">
+  <form method="post" action="/settings/profile" class="stack">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>Display name <input name="display_name" value="{{.User.DisplayName}}" maxlength="60"></label>
+    <label>Your timezone, in hours from UTC <input name="tz" type="number" step="1" min="-12" max="14" value="{{tzh .User.TZOffsetMin}}"></label>
+    <label class="check"><input type="checkbox" name="public" value="1" {{if .User.Public}}checked{{end}}> <span>Show my profile at <a href="/@{{.User.Username}}">/@{{.User.Username}}</a> and on the leaderboard</span></label>
+    <button class="btn" type="submit">Save</button>
+  </form>
+  </div>
+</section>
+
+<section class="sec" id="prompt-check">
+  <header class="sec-h"><h2>Prompt check</h2></header>
+  <div class="sec-b">
+  <form method="post" action="/settings/prompt-check" class="stack">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label class="check"><input type="checkbox" name="prompt_check" value="1" {{if .Data.PromptCheck}}checked{{end}}> <span>Check my prompts with AI</span></label>
+    <p>An AI model reads each new prompt you send and decides if it adds something of yours. When this is off, your prompts stay on your computer and your time counts without the check.</p>
+    <p>The prompts that you send while this is off are checked later, when an application that you connected reads the project. A Hack Club YSWS program's site is one such application. If you plan to connect one, keep this on. Your hours will then be more accurate.</p>
+    {{if not .Data.ServerCheck}}<p class="muted small">This server has the check turned off for everyone right now.</p>{{end}}
+    <button class="btn" type="submit">Save</button>
+  </form>
+  </div>
+</section>
+
+<section class="sec">
+  <header class="sec-h"><h2>Projects</h2><details class="q"><summary aria-label="About hiding projects and linking repos"></summary><div><p>A hidden project never appears on your public profile. Its time still counts toward your totals.</p><p>A project that is not a public repo shows under the name of its folder until you give it another name. SeaTime sends the folder's name, never where the folder is.</p><p>If you link a repo, SeaTime can check your commits against GitHub. This works only for public repos.</p></div></details></header>
+  <div class="sec-b">
+  {{if .Data.Projects}}
+  {{range .Data.Projects}}
+  <form method="post" action="/settings/project" class="proj-row">
+    <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+    <div class="pname"><a href="/@{{$.User.Username}}/{{.Slug}}">{{.Name}}</a><div>{{.Key}}</div></div>
+    <label>Name <input name="name" value="{{.Name}}" maxlength="80"></label>
+    <label>GitHub repo, as owner/name <input name="repo" value="{{.Repo}}" placeholder="owner/name" maxlength="120"></label>
+    <label class="check"><input type="checkbox" name="hidden" value="1" {{if .Hidden}}checked{{end}}> Hide this project</label>
+    <button class="btn small" type="submit">Save</button>
+  </form>
+  {{end}}
+  {{else}}<p class="verse">You have no projects yet.</p>{{end}}
+  </div>
+</section>
+
+<section class="sec" id="computers">
+  <header class="sec-h"><h2>Your computers</h2></header>
+  <div class="sec-b">
+  <form method="post" action="/settings/computers" class="stack">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label class="check"><input type="checkbox" name="also_hackatime" value="1" {{if .Data.AlsoHackatime}}checked{{end}}> <span>Also send editor time to Hackatime</span></label>
+    <p class="muted small">Your Hackatime stats keep counting your editor time. Time from AI tools never goes to Hackatime.</p>
+    <label class="check"><input type="checkbox" name="auto_update" value="1" {{if .Data.AutoUpdate}}checked{{end}}> <span>Update SeaTime automatically</span></label>
+    <p class="muted small">Checks for a new version once a day and installs it.</p>
+    <button class="btn" type="submit">Save</button>
+  </form>
+  <p class="muted small">Computers apply these within a minute or two. A setting changed by command on a computer stays that way until you change it here.</p>
+  {{if .Data.Computers}}
+  {{range .Data.Computers}}
+  <details class="dev">
+    <summary><b>{{.Name}}</b><span class="muted"> · {{if .OS}}{{osname .OS}}{{else}}unknown system{{end}} · last sync {{ago .LastSeen}}</span>{{if .Revoked}}<span class="muted"> · {{if .Removed}}removed{{else}}disconnected{{end}}</span>{{else if not .Reports}}<span class="muted"> · update needed</span>{{end}}{{if .Relink}} · <span class="bad">waits for approval</span>{{end}}{{with .Problems}} · <span class="bad">{{len .}} problem{{if ne (len .) 1}}s{{end}}</span>{{end}}</summary>
+    <p class="muted small">Device <code>{{.ID}}</code></p>
+    {{if .Revoked}}
+      {{if .Removed}}<p>SeaTime was removed from this computer.</p>{{else}}<p>This computer is disconnected. It no longer sends time here.</p>{{end}}
+      {{if .Relink}}<p>This computer asks to connect again (code <code>{{.Relink.UserCode}}</code>).</p>
+      <form method="post" action="/device/approve" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="code" value="{{.Relink.UserCode}}"><button class="btn small" type="submit">Connect it again</button></form>{{end}}
+    {{else}}
+    {{if .Relink}}<p class="bad">This computer is signed out. Approve the sign-in it started (code <code>{{.Relink.UserCode}}</code>) to connect it again.</p>
+      <form method="post" action="/device/approve" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="code" value="{{.Relink.UserCode}}"><button class="btn small" type="submit">Approve the sign-in</button></form>{{end}}
+    <dl class="kv">
+      <dt>System</dt><dd>{{if .OS}}{{osname .OS}}{{else}}unknown{{end}}{{if .Version}}, SeaTime {{.Version}}{{end}}</dd>
+      <dt>Last sync</dt><dd>{{ago .LastSeen}}</dd>
+      {{if .Reports}}
+      <dt>Last check-in</dt><dd>{{ago .CheckedIn}}{{if not .Online}}. Requests from this page wait until it checks in again.{{end}}</dd>
+      <dt>AI tools</dt><dd>{{if .Tools}}{{range $i, $t := .Tools}}{{if $i}}, {{end}}{{$t.Name}}{{if eq $t.State "failed"}} (hooks could not be added){{else if eq $t.State "opted-out"}} (turned off){{end}}{{end}}{{else}}none found yet{{end}}</dd>
+      <dt>Editor plugin</dt><dd>{{if .Settings.EditorPlugin}}reports to SeaTime{{if .Settings.AlsoHackatime}}, and to Hackatime{{end}}{{else}}not connected{{end}}</dd>
+      <dt>Updates</dt><dd>{{if .Settings.AutoUpdate}}automatic{{else}}off on this computer{{end}}</dd>
+      <dt>Problems</dt><dd>{{if .Problems}}{{range .Problems}}<span class="bad">{{.}}</span><br>{{end}}{{else}}none{{end}}</dd>
+      {{else}}
+      <dt>Update needed</dt><dd>This computer runs an older SeaTime. It cannot show its health or take requests from this page. It updates itself within a day if automatic updates are on.</dd>
+      {{end}}
+    </dl>
+    {{range .Requests}}<p class="muted small">{{.What}}, {{ago .When}}: {{.State}}</p>{{end}}
+    <div class="dev-acts">
+      {{if .CanRemove}}
+      <form method="post" action="/settings/device/remove" class="inline">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+        <label class="check"><input type="checkbox" name="purge" value="1"> <span>Also delete SeaTime's data on it</span></label>
+        <button class="btn small danger" type="submit">Remove SeaTime from this computer</button>
+      </form>
+      {{end}}
+      <form method="post" action="/settings/device" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="btn small alt" type="submit">Disconnect</button></form>
+    </div>
+    {{end}}
+  </details>
+  {{end}}
+  <p class="muted small">Remove takes the hooks out of your AI tools, gives your editor plugin back its old settings and stops SeaTime on that computer. Disconnect only stops the computer from sending time here.</p>
+  {{else}}<p class="verse">You have no computers yet. Copy the install line from the <a href="/">home page</a> into a terminal on your computer.</p>{{end}}
+  <p><a class="btn small alt" href="/device">Enter a sign-in code</a></p>
+  </div>
+</section>
+
+<section class="sec" id="applications">
+  <header class="sec-h"><h2>Connected applications</h2></header>
+  <div class="sec-b">
+  {{if .Data.Apps}}
+  <table><thead><tr><th>Application</th><th>Allowed</th><th></th></tr></thead><tbody>
+  {{range .Data.Apps}}<tr>
+    <td>{{.Client.Name}}</td><td>{{ago .Created}}</td>
+    <td class="n"><form method="post" action="/settings/applications/revoke" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="client_id" value="{{.Client.ID}}"><button class="btn small danger" type="submit">Revoke</button></form></td>
+  </tr>{{end}}
+  </tbody></table>
+  <p class="muted small">Each of these can see your project names, hours and commit list. Revoke takes that back at once.</p>
+  {{else}}<p class="verse">No application can read your hours. An application asks for your permission the first time it connects.</p>{{end}}
+  <p><a class="btn small alt" href="/developers">Applications you made</a></p>
+  </div>
+</section>
+
+<section class="sec" id="prompt-text">
+  <header class="sec-h"><h2>Prompt text on your computers</h2></header>
+  <div class="sec-b">
+  <p>SeaTime keeps the text of your prompts on your computers, for the prompt check. You can delete it. SeaTime keeps a hash of each prompt, so your hours do not change, and a prompt that you send again still counts as a repeat.</p>
+  <p>Prompts that still wait for the check cannot be checked without their text, so their time will not count. If an application that you connected needs your prompts checked later, the deleted ones count as not passing.</p>
+  <form method="post" action="/settings/forget" class="stack">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <button class="btn danger" type="submit">Delete prompt text on all my computers</button>
+  </form>
+  </div>
+</section>
+
+<section class="sec">
+  <header class="sec-h"><h2>Look</h2>
+    <details class="q"><summary aria-label="About looks"></summary><div>A look changes only how SeaTime is drawn. Your choice is kept in this browser, so you can pick a different look on each device.</div></details></header>
+  <div class="sec-b">
+    <div class="looks" id="looks">
+      <a class="look" data-look="channel" href="/settings?look=channel"><i class="sw sw-channel"></i><b>Channel</b><span>Grey strips and gloss</span></a>
+      <a class="look" data-look="grid" href="/settings?look=grid"><i class="sw sw-grid"></i><b>Grid</b><span>Flat, on graph paper</span></a>
+      <a class="look" data-look="shop" href="/settings?look=shop"><i class="sw sw-shop"></i><b>Shop</b><span>Paper and birch</span></a>
+      <a class="look" data-look="gel" href="/settings?look=gel"><i class="sw sw-gel"></i><b>Gel</b><span>Sky and glass</span></a>
+    </div>
+    <noscript><p class="muted small">Changing the look needs JavaScript.</p></noscript>
+  </div>
+</section>
+
+<section class="sec">
+  <header class="sec-h"><h2>Accounts</h2></header>
+  <div class="sec-b">
+  <dl class="kv">
+    <dt>GitHub</dt><dd>{{if .User.GitHub}}<b>{{.User.GitHub}}</b> is linked{{else if .Data.GH}}<a class="btn small alt" href="/auth/github?link=1">Link GitHub</a>{{else}}<span class="muted">This server has no GitHub login.</span>{{end}}</dd>
+    <dt>Role</dt><dd><code>{{.User.Role}}</code></dd>
+  </dl>
+  </div>
+</section>
+<section class="sec alert" id="delete">
+  <header class="sec-h"><h2>Delete my SeaTime account</h2></header>
+  <div class="sec-b">
+  <p>This deletes your projects, hours, computers and prompt checks from SeaTime, and the applications that you made or allowed. Your computers remove SeaTime the next time that they check in, along with what it kept on them. A computer with an older SeaTime is only disconnected.</p>
+  <p>Your Hack Club account stays as it is. You cannot undo this.</p>
+  <form method="post" action="/settings/delete-account" class="stack">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>Type your username, <b>{{.User.Username}}</b>, to confirm <input name="confirm" autocomplete="off" spellcheck="false"></label>
+    <button class="btn danger" type="submit">Delete my SeaTime account</button>
+  </form>
+  </div>
+</section>
+{{if .Data.TrustLookup}}
+<section class="sec" id="privacy">
+  <header class="sec-h"><h2>What this server looks up</h2></header>
+  <div class="sec-b">
+  <p>This server asks Hackatime for your account's trust status, using your Slack ID, and passes it on to applications that read your hours.</p>
+  </div>
+</section>
+{{end}}
+{{end}}

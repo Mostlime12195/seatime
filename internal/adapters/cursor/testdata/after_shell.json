@@ -1,0 +1,1 @@
+{"conversation_id":"cv1","generation_id":"g1","model":"claude-sonnet-5-5","hook_event_name":"afterShellExecution","workspace_roots":["/work/site"],"command":"npm run build","output":"ok","duration":4100,"cwd":"/work/site"}

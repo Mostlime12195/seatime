@@ -1,0 +1,27 @@
+{{define "content"}}
+<header class="phead">
+  <h1>Leaderboard</h1>
+  <nav class="tabs act" aria-label="Period">
+    <a href="/leaderboard?p=today" {{if eq .Data.Period "today"}}class="on" aria-current="true"{{end}}>Today</a>
+    <a href="/leaderboard?p=week" {{if eq .Data.Period "week"}}class="on" aria-current="true"{{end}}>7 days</a>
+    <a href="/leaderboard?p=month" {{if eq .Data.Period "month"}}class="on" aria-current="true"{{end}}>30 days</a>
+  </nav>
+</header>
+<section class="sec">
+  <header class="sec-h"><h2>Ranking</h2><details class="q"><summary aria-label="How is the board ranked?"></summary><div>People are ranked by the hours that SeaTime counted, not by the raw time they spent at the computer. Only public profiles appear here.</div></details></header>
+  <div class="sec-b">
+{{if .Data.Rows}}
+<ol class="board lb">
+  {{range $i, $r := .Data.Rows}}
+  <li>
+    <span class="rank">{{printf "%02d" (add $i 1)}}</span>
+    <a class="who" href="/@{{$r.Username}}">{{if $r.DisplayName}}{{$r.DisplayName}}{{else}}{{$r.Username}}{{end}} <small>@{{$r.Username}}</small></a>
+    <span class="meter"><i style="width:{{pct $r.Struggle $.Data.Max}}%"></i></span>
+    <b>{{dur $r.Struggle}}</b>
+  </li>
+  {{end}}
+</ol>
+{{else}}<p class="verse">Nobody yet.</p>{{end}}
+  </div>
+</section>
+{{end}}

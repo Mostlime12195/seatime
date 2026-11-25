@@ -1,0 +1,30 @@
+{{define "content"}}
+<div class="gate">
+  <div class="enso" aria-hidden="true"><svg viewBox="0 0 200 200">{{template "bezel"}}<circle class="arc{{if .Data.Done}} goal{{end}}" cx="100" cy="100" r="80" pathLength="100" stroke-dasharray="{{if .Data.Done}}100{{else}}66{{end}} 100" transform="rotate(-90 100 100)" stroke="url(#aqua)"/></svg></div>
+  <h1>Connect a computer</h1>
+  {{if .Data.Done}}
+    <p class="flash">Approved. Your computer is connected.</p>
+    <p>Your computer finishes the sign-in on its own. You can close this page.</p>
+    <p><a href="/settings">Your computers</a></p>
+  {{else}}
+    {{if .Data.Err}}<p class="bad">{{.Data.Err}}</p>{{end}}
+    {{if .Data.Device}}
+      <p>Allow <b>{{.Data.Device.DeviceName}}</b>{{if .Data.Device.OS}} ({{osname .Data.Device.OS}}){{end}} to log time to <b>@{{.User.Username}}</b>?</p>
+      {{if .Data.Device.PrevDevice}}<p>This reconnects a computer that you used before. It keeps its history.</p>{{end}}
+      <p class="code-big">{{.Data.Code}}</p>
+      <p class="muted small">Approve only if you started this sign-in yourself, on a computer that shows this code.</p>
+      <form method="post" action="/device/approve" class="stack">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <input type="hidden" name="code" value="{{.Data.Code}}">
+        <button class="btn" type="submit">Approve</button>
+      </form>
+    {{else}}
+      <form method="post" action="/device" class="stack">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <label>The code your computer shows <input name="code" value="{{.Data.Code}}" placeholder="WXYZ-1234" autocomplete="off" autocapitalize="characters" required maxlength="12"></label>
+        <button class="btn" type="submit">Continue</button>
+      </form>
+    {{end}}
+  {{end}}
+</div>
+{{end}}

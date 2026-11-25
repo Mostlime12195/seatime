@@ -1,0 +1,50 @@
+{{define "content"}}
+<header class="phead">
+  <h1>Admin</h1>
+</header>
+{{if eq .Flash "1"}}<p class="flash" role="status">Saved.</p>{{else if .Flash}}<p class="flash" role="status">{{.Flash}}</p>{{end}}
+<section class="sec" id="check">
+  <header class="sec-h"><h2>Prompt check</h2></header>
+  <div class="sec-b">
+  {{with .Data.Check}}
+  <p>The check is {{if .On}}on{{else}}off{{end}}.{{if and .On (not .KeySet)}} OPENROUTER_API_KEY is not set, so every check answers "try later": prompts stay queued on the devices and their time stays pending until a key is set.{{end}}</p>
+  <p>Judges, asked in this order: {{range $i, $m := .Models}}{{if $i}}, then {{end}}<code>{{$m.Model}}</code>{{end}}.</p>
+  <p>Last answer from a judge: {{if .LastOK.IsZero}}none since this server started{{else}}{{ago .LastOK}}{{end}}. Failed calls in the last hour: {{.FailsHour}}.{{if .LastErr}} Last error: {{.LastErr}}.{{end}}</p>
+  <p>Today (UTC): {{.CallsToday}} paid judge call{{if ne .CallsToday 1}}s{{end}}, {{.FailsToday}} failed, ${{printf "%.4f" .SpentToday}} of the ${{printf "%.2f" .Budget}} daily budget.{{if ge .SpentToday .Budget}} The budget is used up: checks wait until tomorrow.{{end}}</p>
+  <p>Devices that synced in the last 7 days, by SeaTime version:{{range $i, $c := .Versions}}{{if $i}};{{end}} {{if $c.Version}}{{$c.Version}}{{else}}unknown (older){{end}}: {{$c.Devices}}{{else}} none{{end}}.{{if .MinClient}} Oldest version taken: {{.MinClient}}; {{.TooOld}} device{{if ne .TooOld 1}}s are{{else}} is{{end}} older and told to update.{{end}} Ship the release first, wait until these show it, then switch the check on.</p>
+  <p>Time waiting for the check, as devices last reported it: {{.PendingMin}} min across {{.PendingUser}} account{{if ne .PendingUser 1}}s{{end}}.</p>
+  {{end}}
+  </div>
+</section>
+<section class="sec" id="pulls">
+  <header class="sec-h"><h2>Ask for saved prompts</h2></header>
+  <div class="sec-b">
+  <form method="post" action="/admin/prompt-pull" class="stack">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>Username <input name="username" spellcheck="false"></label>
+    <label>Project key <input name="project" spellcheck="false"></label>
+    <p class="muted small">The account's devices send the project's saved prompts, and every prompt from the times the account had the check off, for their check on their next sync. Prompts that do not come within 14 days count as not passing.</p>
+    <div><button class="btn small" type="submit">Ask</button></div>
+  </form>
+  </div>
+</section>
+<section class="sec" id="settings">
+  <header class="sec-h"><h2>Settings</h2>
+    <details class="q"><summary aria-label="About settings"></summary><div><p>These change at once, without a redeploy. Each starts at the value its environment variable gives; a value saved here overrides it until you reset it. Keys and addresses stay in the environment. Every change is logged below.</p></div></details></header>
+  <div class="sec-b">
+  {{range .Data.Settings}}
+  <form method="post" action="/admin/settings" class="stack">
+    <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="key" value="{{.Def.Key}}">
+    <label>{{.Def.Label}} <span class="muted small">({{.Def.Key}}; default from {{.Def.Env}})</span>
+    {{if .Def.Choices}}<select name="value">{{$v := .Value}}{{range .Def.Choices}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{.}}</option>{{end}}</select>
+    {{else if .Def.Long}}<textarea name="value" rows="4" spellcheck="false">{{.Value}}</textarea>
+    {{else}}<input name="value" value="{{.Value}}" spellcheck="false">{{end}}</label>
+    <p class="muted small">{{.Def.Help}} {{if .Set}}Set by @{{.Set.By}} {{ago .Set.Updated}}.{{else}}The default is in force.{{end}}</p>
+    <div><button class="btn small" type="submit" name="action" value="save">Save</button>{{if .Set}} <button class="btn small alt" type="submit" name="action" value="reset">Reset to default</button>{{end}}</div>
+  </form>
+  {{end}}
+  {{if .Data.Log}}<h3>Changes</h3>
+  <ul class="plain">{{range .Data.Log}}<li>{{ago .At}}: @{{.By}} {{if .New}}set {{.Label}}{{else}}reset {{.Label}} to its default{{end}}</li>{{end}}</ul>{{end}}
+  </div>
+</section>
+{{end}}

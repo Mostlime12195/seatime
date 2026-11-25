@@ -1,0 +1,34 @@
+{{define "content"}}
+<div class="gate">
+  {{if .Data.Err}}
+    <h1>This request cannot go on</h1>
+    <p class="bad">{{.Data.Err}}</p>
+    <p><a href="/">Back to SeaTime</a></p>
+  {{else}}{{with .Data}}
+    <h1>{{.Client.Name}}</h1>
+    <p><b>{{.Client.Name}}</b> will be able to see your project names, hours, and commit list.</p>
+    {{if .Preview}}
+    <p class="small">What it would see now:</p>
+    <table class="preview"><thead><tr><th>Project</th><th class="n">Hours</th><th class="n">Commits</th><th>Status</th></tr></thead><tbody>
+    {{range .Preview}}<tr><td>{{.Name}}</td><td class="n">{{dur .Seconds}}</td><td class="n">{{.Commits}}</td><td>{{.Status}}</td></tr>{{end}}
+    </tbody></table>
+    {{if .More}}<p class="muted small">And {{.More}} more project{{if ne .More 1}}s{{end}}.</p>{{end}}
+    {{else}}
+    <p class="muted small">You have no hours yet. It will see your projects once you work on them.</p>
+    {{end}}
+    <p class="muted small">It cannot change anything. It cannot see your prompts, your code or {{if eq .Hidden 1}}the project you hid{{else if .Hidden}}the {{.Hidden}} projects you hid{{else}}projects you hide{{end}}. {{if .Developer}}@{{.Developer}} registered this application. {{end}}You can take its access back at any time in Settings.</p>
+    <form method="post" action="/oauth/authorize" class="stack">
+      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+      <input type="hidden" name="client_id" value="{{.Client.ID}}">
+      <input type="hidden" name="redirect_uri" value="{{.RedirectURI}}">
+      <input type="hidden" name="state" value="{{.State}}">
+      <input type="hidden" name="code_challenge" value="{{.Challenge}}">
+      <input type="hidden" name="code_challenge_method" value="S256">
+      <input type="hidden" name="response_type" value="code">
+      <input type="hidden" name="scope" value="{{.Scope}}">
+      <div class="dev-acts"><button class="btn" type="submit" name="approve" value="1">Allow</button>
+      <button class="btn alt" type="submit" name="approve" value="0">Cancel</button></div>
+    </form>
+  {{end}}{{end}}
+</div>
+{{end}}

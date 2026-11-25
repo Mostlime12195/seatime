@@ -1,0 +1,1 @@
+{"sessionId":"cs-1","timestamp":1790000020000,"cwd":"/work/app","toolName":"bash","toolArgs":{"command":"go test ./..."},"toolResult":{"resultType":"failure","textResultForLlm":"FAIL"}}

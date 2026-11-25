@@ -1,0 +1,21 @@
+# Manual only (Actions tab > macos > Run workflow). Kept under five minutes
+# so it stays inside the free allowance; no paid runners.
+name: macos
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: macos-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: unit tests (client)
+        run: go test ./cmd/seatime/... ./internal/client/... ./internal/adapters/... ./pkg/...
+      - name: install, record, uninstall
+        run: sh scripts/mac-smoke.sh

@@ -1,0 +1,69 @@
+{{define "content"}}
+<header class="phead">
+  <h1>Applications you made</h1>
+  <p class="sub">Register an application so that it can read people's hours on SeaTime, with their permission.</p>
+</header>
+{{with .Data}}
+{{if .Err}}<p class="bad" role="alert">{{.Err}}</p>{{end}}
+{{if .Secret}}
+<section class="sec">
+  <header class="sec-h"><h2>The secret for this application</h2></header>
+  <div class="sec-b">
+    <p>Copy it now. SeaTime keeps only a hash of it, so this page cannot show it again. If you lose it, make a new one.</p>
+    <div class="code nosign"><pre tabindex="0"><code>{{.Secret}}</code></pre></div>
+  </div>
+</section>
+{{end}}
+
+<section class="sec">
+  <header class="sec-h"><h2>Your applications</h2></header>
+  <div class="sec-b">
+  {{if .Apps}}{{range .Apps}}
+  <div class="dev">
+    <h3>{{.Name}}</h3>
+    <dl class="kv"><dt>Client ID</dt><dd><code>{{.ID}}</code></dd><dt>Registered</dt><dd>{{ago .Created}}</dd></dl>
+    <form method="post" action="/developers/{{.ID}}" class="stack">
+      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+      <label>Name <input name="name" value="{{.Name}}" maxlength="60" required></label>
+      <label>Redirect addresses, one per line <textarea name="redirect_uris" rows="2" required>{{range .RedirectURIs}}{{.}}
+{{end}}</textarea></label>
+      <button class="btn small" type="submit">Save</button>
+    </form>
+    <div class="dev-acts">
+      <form method="post" action="/developers/{{.ID}}" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="do" value="secret"><button class="btn small alt" type="submit">Make a new secret</button></form>
+      <form method="post" action="/developers/{{.ID}}" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="do" value="delete"><button class="btn small danger" type="submit">Delete this application</button></form>
+    </div>
+  </div>
+  {{end}}
+  <p class="muted small">A new secret replaces the old one at once. Deleting an application takes back its access from everyone who allowed it.</p>
+  {{else}}<p class="verse">You have not registered an application yet.</p>{{end}}
+  </div>
+</section>
+
+<section class="sec">
+  <header class="sec-h"><h2>Register an application</h2></header>
+  <div class="sec-b">
+  <form method="post" action="/developers" class="stack">
+    <input type="hidden" name="csrf" value="{{$.CSRF}}">
+    <label>Name, as people will see it <input name="name" maxlength="60" required></label>
+    <label>Redirect addresses, one per line <textarea name="redirect_uris" rows="2" placeholder="https://example.com/seatime/callback" required></textarea></label>
+    <p class="muted small">Each address must start with https://, or with http://localhost or http://127.0.0.1 while you test. SeaTime sends people back only to an address that matches one of these exactly.</p>
+    <button class="btn" type="submit">Register</button>
+  </form>
+  </div>
+</section>
+
+<section class="sec">
+  <header class="sec-h"><h2>How it works</h2></header>
+  <div class="sec-b prose">
+    <p>SeaTime uses OAuth 2.0 with the authorization code flow, and PKCE (S256) is required. There is one scope, <code>read</code>.</p>
+    <ul>
+      <li>Send the person to <code>{{.BaseURL}}/oauth/authorize</code></li>
+      <li>Exchange the code for a token at <code>{{.BaseURL}}/oauth/token</code></li>
+      <li>Read hours with the access token, for example at <code>{{.BaseURL}}/api/v1/users/current/stats</code> and <code>{{.BaseURL}}/api/v1/users/current/projects/{project}/stats</code></li>
+    </ul>
+    <p>Every endpoint is listed in YSWS.md in the SeaTime repository.</p>
+  </div>
+</section>
+{{end}}
+{{end}}

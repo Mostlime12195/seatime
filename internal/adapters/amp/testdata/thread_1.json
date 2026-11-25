@@ -1,0 +1,15 @@
+{
+ "v": 235,
+ "id": "T-0001",
+ "created": 1790000000000,
+ "title": "pagination",
+ "env": {"initial": {"trees": [{"uri": "file:///work/api", "repository": {"ref": "refs/heads/main"}}]}},
+ "messages": [
+  {"role": "user", "messageId": 0, "content": [{"type": "text", "text": "add pagination to the users endpoint"}], "meta": {"sentAt": 1790000000000}},
+  {"role": "assistant", "messageId": 1, "content": [{"type": "thinking", "thinking": "..."}, {"type": "tool_use", "name": "Read", "input": {"path": "/work/api/users.go"}}], "usage": {"model": "claude-x"}, "meta": {"sentAt": 1790000005000}},
+  {"role": "user", "messageId": 2, "content": [{"type": "tool_result", "toolUseID": "t1"}], "meta": {"sentAt": 1790000006000}},
+  {"role": "assistant", "messageId": 3, "content": [{"type": "tool_use", "name": "edit_file", "input": {"path": "/work/api/users.go", "old_str": "a", "new_str": "b"}}, {"type": "tool_use", "name": "Bash", "input": {"cmd": "go test ./..."}}], "meta": {"sentAt": 1790000015000}},
+  {"role": "user", "messageId": 4, "content": [{"type": "tool_result", "toolUseID": "t2"}], "meta": {"sentAt": 1790000020000}},
+  {"role": "assistant", "messageId": 5, "content": [{"type": "text", "text": "Done, pagination added."}], "meta": {"sentAt": 1790000030000}}
+ ]
+}

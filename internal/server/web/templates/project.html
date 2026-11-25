@@ -1,0 +1,85 @@
+{{define "content"}}
+{{with .Data}}
+<header class="phead">
+  <h1>{{.P.Name}}</h1>
+  <p class="sub"><a href="/@{{.Owner.Username}}">@{{.Owner.Username}}</a>
+  {{if .RepoURL}}<a href="{{.RepoURL}}" rel="noopener">{{.P.Repo}}</a>{{else if .IsOwner}}<a href="/settings">link a GitHub repo</a>{{end}}
+  {{if .P.Hidden}}<span class="seal">hidden</span>{{end}}</p>
+</header>
+<nav class="ranges" aria-label="Range">{{range .Ranges}}<a href="?range={{.Key}}"{{if eq .Key $.Data.Range.Key}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</nav>
+<div id="live" data-live="{{.LiveURL}}">{{template "live" $}}</div>
+{{if .P.Repo}}<script src="/static/commits.js" defer></script>{{end}}
+{{end}}
+{{end}}
+
+{{define "live"}}{{with .Data}}
+<section class="gauge flat">
+  <div class="readout">
+    <div class="cell"><b>{{durx .RangeTotal}}</b><span>{{.Range.Label}}</span></div>
+    <div class="cell"><b>{{durx .DailyAvg}}</b><span>daily average</span></div>
+    <div class="cell"><b>{{.RangeCommits}}</b><span>commit{{if ne .RangeCommits 1}}s{{end}}</span></div>
+    <div class="cell"><b>{{hours .AllStruggle}}<i class="u">h</i></b><span>all time</span></div>
+  </div>
+</section>
+{{if .PendingMin}}<p class="sub">{{.PendingMin}} min waiting on check</p>{{end}}
+
+<section class="sec">
+  <header class="sec-h"><h2>Time per day</h2><p>{{.Range.Label}}</p></header>
+  <div class="sec-b"><div class="scrollx end" tabindex="0" role="group" aria-label="Daily chart">{{safe .Bars}}</div></div>
+</section>
+
+{{if .Tools}}<section class="sec">
+  <header class="sec-h"><h2>By hand and with AI</h2><p>{{.Range.Label}}</p></header>
+  <div class="sec-b">
+    <div class="split" role="img" aria-label="{{dur .Split.Hand}} by hand, {{dur .Split.AI}} with AI tools"><i class="h" style="width:{{pct .Split.Hand .Split.Counted}}%"></i><i class="a" style="width:{{pct .Split.AI .Split.Counted}}%"></i></div>
+    <div class="legend"><span><i class="k h"></i>by hand <b>{{dur .Split.Hand}}</b></span><span><i class="k a"></i>with AI <b>{{dur .Split.AI}}</b></span></div>
+    <ul class="tools">{{range .Tools}}<li><span>{{.Name}}</span><span class="share"><i class="{{if .Hand}}h{{else}}a{{end}}" style="width:{{.Pct}}%"></i></span><b>{{dur .Seconds}}</b></li>{{end}}</ul>
+  </div>
+</section>{{end}}
+
+{{if .Models}}<section class="sec">
+  <header class="sec-h"><h2>Models</h2><p>{{.Range.Label}}</p><details class="q"><summary aria-label="About models"></summary><div><p>Your counted time and prompts for each AI model, under the name the AI tool gave it. A prompt's time goes to the model that answered it. Time from hand edits has no model.</p><p>"Model not recorded" is AI time from before SeaTime kept the model, or from a tool that does not name its model. Only you see this section.</p></div></details></header>
+  <div class="sec-b">
+    <ul class="tools models">{{range .Models}}<li><span{{if .Title}} title="{{.Title}}"{{end}}>{{.Name}}</span><span class="share"><i class="{{.Class}}" style="width:{{.Pct}}%"></i></span><b>{{.Time}}</b><span class="np">{{if .Prompts}}{{.Prompts}} prompt{{if ne .Prompts 1}}s{{end}}{{end}}</span></li>{{end}}</ul>
+  </div>
+</section>{{end}}
+
+<section class="sec">
+  <header class="sec-h"><h2>Day</h2><p>local time</p></header>
+  <div class="sec-b">
+    <nav class="pager" aria-label="Day">
+      <a href="?range={{.Range.Key}}&amp;day={{.PrevDay}}" rel="prev">&larr; {{.PrevDay}}</a>
+      <b>{{.Day}} · {{dur .DayTotals.Struggle}}</b>
+      {{if .NextDay}}<a href="?range={{.Range.Key}}&amp;day={{.NextDay}}" rel="next">{{.NextDay}} &rarr;</a>{{end}}
+    </nav>
+    <div class="scrollx" tabindex="0" role="group" aria-label="Timeline of {{.Day}}">{{safe .Timeline}}</div>
+    {{if .DayCommits}}<div class="legend"><span><i class="k c"></i>{{.DayCommits}} commit{{if ne .DayCommits 1}}s{{end}} that day</span></div>{{end}}
+  </div>
+</section>
+
+<section class="sec">
+  <header class="sec-h"><h2>Commits</h2></header>
+  <div class="sec-b">
+  {{if .Commits}}
+  <table class="fold"{{if $.Data.P.Repo}} data-repo="{{$.Data.P.Repo}}"{{end}}><thead><tr><th>Commit</th><th>When</th><th class="n">Change</th><th></th></tr></thead><tbody>
+  {{range .Commits}}<tr data-sha="{{.SHA}}">
+    <td class="wide">{{if .URL}}<a href="{{.URL}}" rel="noopener"><code>{{short .SHA}}</code></a>{{else}}<code>{{short .SHA}}</code>{{end}}</td>
+    <td>{{ago .TS}}</td><td class="n">+{{.Ins}} / -{{.Del}}</td>
+    <td class="wide">{{if not $.Data.P.Repo}}<span class="seal">no repo linked</span>{{end}}</td>
+  </tr>{{end}}
+  </tbody></table>
+  {{else}}<p class="verse">No commits in the last 30 days.</p>{{end}}
+  </div>
+</section>
+
+<section class="sec">
+  <header class="sec-h"><h2>Checked hours</h2><details class="q"><summary aria-label="About checked hours"></summary><div><p>These are the hours that the server has checked. Your computer sends its records after each stretch of work, so the newest hours are checked about 3 hours after you stop. Applications that you connect read these hours.</p></div></details></header>
+  <div class="sec-b">
+  <dl class="kv">
+    <dt>Checked</dt><dd>{{dur .Check.Verified}}{{if not .Check.AsOf.IsZero}}, up to {{ago .Check.AsOf}}{{end}}</dd>
+    {{if ge .Check.Pending 60.0}}<dt>Unchecked</dt><dd>{{dur .Check.Pending}}, checked about 3 hours after you stop</dd>{{end}}
+    <dt>Status</dt><dd>{{if eq .Check.Status "verified"}}verified{{else if eq .Check.Status "pending"}}pending: {{.Check.Reason}}{{else}}<span class="bad">failed: {{.Check.Reason}}</span>{{end}}</dd>
+  </dl>
+  </div>
+</section>
+{{end}}{{end}}
