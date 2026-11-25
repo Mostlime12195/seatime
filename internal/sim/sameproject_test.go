@@ -356,3 +356,56 @@ func TestSegmentsGoOnWhenTheRemoteChanges(t *testing.T) {
 		}
 	}
 }
+
+// `seatime send`: the records go up at once, without waiting for the
+// stretch to be over, and work done afterwards goes in the next segment.
+func TestSendNowUploadsTheStretchSoFar(t *testing.T) {
+	dir := sandbox(t)
+	w, err := NewWorld(filepath.Join(dir, "w"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	d, err := w.NewDevice("lia", "laptop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Daemon.Auth = &d.Auth
+	ctx := context.Background()
+	u, _ := w.Store.UserByName(ctx, "lia")
+	srv := serverSide{t, w, u}
+	root := filepath.Join(d.Home, "code", "app")
+	gitFolder(d, root, "")
+	handWork(d, root, 10)
+	w.Advance(2 * time.Minute) // nowhere near over
+	if err := d.SyncNow(); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := d.Daemon.SegmentsOnce(ctx, w.Now()); err != nil || n != 0 {
+		t.Fatalf("sent %d before the stretch was over (%v)", n, err)
+	}
+	if n, err := d.Daemon.SegmentsNow(ctx, w.Now()); err != nil || n != 1 {
+		t.Fatalf("send now: %d (%v)", n, err)
+	}
+	if n, err := d.Daemon.SegmentsNow(ctx, w.Now()); err != nil || n != 0 {
+		t.Fatalf("sent again: %d (%v)", n, err)
+	}
+	handWork(d, root, 10)
+	w.Advance(3 * time.Hour)
+	if err := d.SyncNow(); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := d.Daemon.SegmentsOnce(ctx, w.Now()); err != nil || n != 1 {
+		t.Fatalf("the work after it: %d (%v)", n, err)
+	}
+	ps := srv.projects()
+	segs, _ := w.Store.ListSegments(ctx, u.ID, ps[0].ID)
+	if len(segs) != 2 {
+		t.Fatalf("%d segments, want 2", len(segs))
+	}
+	for i, sg := range segs {
+		if sg.Status != srvstore.SegVerified || sg.Scored.Seconds() < 5*60 {
+			t.Errorf("segment %d: %s %v, %.0f s", i, sg.Status, sg.Problems, sg.Scored.Seconds())
+		}
+	}
+}

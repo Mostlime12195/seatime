@@ -122,6 +122,10 @@ func Upload(ctx context.Context, c *syncer.Client, b api.Bundle, wait func(time.
 // window is written up to an hour after it opens, and the sync after it.
 const settle = 75 * time.Minute
 
+// ReadyAfter is how long after a stretch's last record Next takes it as
+// over.
+const ReadyAfter = splitPad + settle
+
 // Next plans the segments of one project that are ready to go up: its
 // records from since (the end of the last segment sent; zero for the
 // first) up to the last stretch of work that is over, cut in the middle of

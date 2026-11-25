@@ -38,6 +38,19 @@ func MetaSegmentUntil(project string) string { return "segment_until:" + project
 // SegmentsOnce uploads every segment that is ready, up to the last synced
 // checkpoint. It returns how many went up.
 func (d *Daemon) SegmentsOnce(ctx context.Context, now time.Time) (int, error) {
+	return d.segments(ctx, now, false)
+}
+
+// SegmentsNow uploads every project's records up to the last synced
+// checkpoint without waiting for the stretch of work to be over (`seatime
+// send`). The next segment of a project starts at now. A prompt sent just
+// before now loses what it would have counted after now, so this is for a
+// moment when the work is done and someone wants to see it checked.
+func (d *Daemon) SegmentsNow(ctx context.Context, now time.Time) (int, error) {
+	return d.segments(ctx, now, true)
+}
+
+func (d *Daemon) segments(ctx context.Context, now time.Time, flush bool) (int, error) {
 	auth, ok := d.auth()
 	if !ok {
 		return 0, syncer.ErrNotLoggedIn
@@ -57,7 +70,11 @@ func (d *Daemon) SegmentsOnce(ctx context.Context, now time.Time) (int, error) {
 		if v, _ := d.Store.GetMeta(MetaSegmentUntil(p.Key)); v != "" {
 			since, _ = time.Parse(time.RFC3339, v)
 		}
-		ranges, end, err := segment.Next(d.Store, p.Key, since, ss.Seq, now)
+		plan := now
+		if flush {
+			plan = now.Add(segment.ReadyAfter + time.Minute) // every stretch counts as over
+		}
+		ranges, end, err := segment.Next(d.Store, p.Key, since, ss.Seq, plan)
 		if err != nil {
 			return sent, err
 		}
@@ -84,6 +101,9 @@ func (d *Daemon) SegmentsOnce(ctx context.Context, now time.Time) (int, error) {
 			if resp.Status != "verified" {
 				logx.Printf("segments: %s from %s: %s %v", p.Key, ro.Since.Format(time.RFC3339), resp.Status, resp.Problems)
 			}
+		}
+		if flush && end.After(now) {
+			end = now // records made from now on go in the next segment
 		}
 		_ = d.Store.SetMeta(MetaSegmentUntil(p.Key), end.UTC().Format(time.RFC3339))
 	}
