@@ -73,11 +73,11 @@
 </section>
 
 <section class="sec">
-  <header class="sec-h"><h2>Checked hours</h2><details class="q"><summary aria-label="About checked hours"></summary><div><p>These are the hours that the server has checked. Your computer sends its records after each stretch of work, so the newest hours are checked about 3 hours after you stop. Applications that you connect read these hours.</p></div></details></header>
+  <header class="sec-h"><h2>Checked hours</h2><details class="q"><summary aria-label="About checked hours"></summary><div><p>These are the hours that the server has checked. Your computer sends its records as you work, and the server checks them {{cycle}}. Applications that you connect read these hours.</p></div></details></header>
   <div class="sec-b">
   <dl class="kv">
     <dt>Checked</dt><dd>{{dur .Check.Verified}}{{if not .Check.AsOf.IsZero}}, up to {{ago .Check.AsOf}}{{end}}</dd>
-    {{$u := unck .Check.Pending .Check.PendingPrompts}}{{if $u}}<dt>Unchecked</dt><dd>{{$u}}, checked about 3 hours after you stop</dd>{{end}}
+    {{$u := unck .Check.Pending .Check.PendingPrompts}}{{if $u}}<dt>Unchecked</dt><dd>{{$u}}, checked {{cycle}}</dd>{{end}}
     <dt>Status</dt><dd>{{if eq .Check.Status "verified"}}verified{{else if eq .Check.Status "pending"}}pending: {{.Check.Reason}}{{else}}<span class="bad">failed: {{.Check.Reason}}</span>{{end}}</dd>
   </dl>
   </div>

@@ -23,7 +23,7 @@ func TestSplitTimes(t *testing.T) {
 	if len(rs) != 3 {
 		t.Fatalf("%d ranges for 150 days", len(rs))
 	}
-	if !rs[0].Since.Equal(ts[0].Add(-splitPad)) || !rs[len(rs)-1].Until.Equal(ts[len(ts)-1].Add(splitPad)) {
+	if !rs[0].Since.Equal(ts[0].Add(-audit.SplitPad)) || !rs[len(rs)-1].Until.Equal(ts[len(ts)-1].Add(audit.SplitPad)) {
 		t.Fatalf("ends not padded: %v .. %v", rs[0].Since, rs[len(rs)-1].Until)
 	}
 	for i, r := range rs {
@@ -33,9 +33,9 @@ func TestSplitTimes(t *testing.T) {
 		if i > 0 && !r.Since.Equal(rs[i-1].Until) {
 			t.Errorf("range %d does not touch the one before", i)
 		}
-		// the cut lies in a pause: no record within splitPad of it
+		// the cut lies in a pause: no record within audit.SplitPad of it
 		for _, x := range ts {
-			if d := x.Sub(r.Until); i < len(rs)-1 && d > -splitPad && d < splitPad {
+			if d := x.Sub(r.Until); i < len(rs)-1 && d > -audit.SplitPad && d < audit.SplitPad {
 				t.Errorf("record %v is %v from cut %v", x, d, r.Until)
 				break
 			}
@@ -44,7 +44,7 @@ func TestSplitTimes(t *testing.T) {
 
 	// a project that fits is one range, trimmed to its records
 	short := ts[:30*30]
-	if rs := splitTimes(short, Options{}); len(rs) != 1 || !rs[0].Until.Equal(short[len(short)-1].Add(splitPad)) {
+	if rs := splitTimes(short, Options{}); len(rs) != 1 || !rs[0].Until.Equal(short[len(short)-1].Add(audit.SplitPad)) {
 		t.Fatalf("short project: %+v", rs)
 	}
 	// a range the user gave is kept at its ends
@@ -84,7 +84,7 @@ func TestNextWaitsForTheStretchToEnd(t *testing.T) {
 		t.Fatalf("sent too early: %+v", rs)
 	}
 	// once it settled: from where the first ended
-	rs, end2, _ := Next(st, p, end, head, t0.Add(305*time.Minute+splitPad+settle))
+	rs, end2, _ := Next(st, p, end, head, t0.Add(305*time.Minute+audit.SplitPad+audit.Settle))
 	if len(rs) != 1 || !rs[0].Since.Equal(end) || !end2.After(t0.Add(305*time.Minute)) {
 		t.Fatalf("second stretch: %+v %v", rs, end2)
 	}

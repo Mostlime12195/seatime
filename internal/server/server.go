@@ -150,6 +150,7 @@ func (s *Server) SetClock(now func() time.Time) {
 // Start launches background workers; they stop when ctx is cancelled.
 func (s *Server) Start(ctx context.Context) {
 	go s.recheckLoop(ctx)
+	go s.countLoop(ctx)
 	go s.showAllChecked(ctx)
 	go s.purgeLoop(ctx)
 }
@@ -166,6 +167,7 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /api/v1/device/start", s.handleDeviceStart)
 	m.HandleFunc("POST /api/v1/device/poll", s.handleDevicePoll)
 	m.HandleFunc("POST /api/v1/sync", s.handleSync)
+	m.HandleFunc("POST /api/v1/records", s.handleRecords)
 	m.HandleFunc("POST /api/v1/segments", s.handleSegment)
 	m.HandleFunc("POST /api/v1/submissions", s.handleSubmissionsGone)
 	m.HandleFunc("POST /api/v1/prompt-check", s.handlePromptCheck)

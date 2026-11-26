@@ -29,6 +29,9 @@ SEATIME_DEV=1 SEATIME_ADDR=127.0.0.1:8790 SEATIME_DB=/tmp/seatime.db ./bin/seati
   answering, the last colour that it served is kept for 7 days. `SEATIME_HACKATIME_URL` sets the address (default
   https://hackatime.hackclub.com). This option sends Slack IDs to Hackatime. While it is on, the account's /settings
   page shows a line about it. It never changes hours.
+- `SEATIME_COUNT_EVERY` (default `1h`) is how often the server counts the records that devices send. It counts at
+  every multiple of this on the clock, so `1h` is each hour on the hour and `15m` is each quarter of an hour. The
+  pages say "checked on the hour", or "checked every 15m".
 - `SEATIME_REVIEW_KEYS` (none by default) is a comma-separated list of keys, each 32 characters or more, for Hack
   Club's review tool. A request with `Authorization: Bearer <key>` may call
   `GET /api/v1/review/users/{user}/projects/{project}?since=&until=`. `{user}` is a Slack member ID or a username, and
@@ -213,7 +216,8 @@ this). It adds a PATH line to your shell rc file (skip with `SEATIME_NO_MODIFY_P
 
 API (see `pkg/api`): `POST /api/v1/device/start|poll`, `POST /api/v1/sync`,
 `POST /api/v1/device/check-in` (a device's health; answers with the account's settings and requests from the web),
-`POST /api/v1/device/requests/{id}` (a device's answer to one request), `POST /api/v1/segments` (records to check),
+`POST /api/v1/device/requests/{id}` (a device's answer to one request), `POST /api/v1/records` (a device's records,
+as it writes them), `POST /api/v1/segments` (a stretch of records, from a device older than v0.1.14),
 `GET /api/v1/users/{u}/projects/{p}/stats?since=&until=` and `.../ysws[.txt]` (a project's checked hours, status and
 export; with the user's own token, `stats` also has the checked time and prompts by AI model, see `YSWS.md`), the read API in Hackatime's format (see `YSWS.md`), OAuth (`GET|POST /oauth/authorize`, `POST /oauth/token`,
 `POST /oauth/revoke`), and `GET /healthz`.
@@ -257,20 +261,41 @@ hash, or with a seq lower than the latest one, is rejected with 409. Buckets are
 a minute, not in the future, and count at most 60 s. They are stored by user, project, minute and device, so
 sending the same minutes again never counts them twice.
 
-Segments (continuous verification): once a stretch of a project's records is over, the device uploads it. That is
-about 3 hours after the last record (`internal/client/segment` Next). The bundle's signature is ed25519 over the raw
-32-byte `sha256(json(bundle with sig=""))`. The server then checks six things. There is at least one stored
-checkpoint inside the seq range. `chain.Verify` passes, so every stored checkpoint in the range matches.
-`start_hash` equals the stored checkpoint at `seq_lo-1` (or genesis at seq 1). There are no entries after the last
-stored checkpoint. No event is timestamped more than 5 min after the server first received a checkpoint that covers
-it (this stops backfill). The records span at most 62 days. The server counts the records itself, with the rule in
-docs/RULE.md. If a device counted them differently, that is not a problem. Any failed check is listed in `problems`,
-and the segment fails. A failed segment credits nothing, and the project shows `failed` with the reason. The server
-also fails a chain that a device of another account sent as well (a copied device key). It takes out minutes that
-an earlier segment of the same account already credits. A segment whose prompts are waiting for their check is
-`pending`. It is counted again, on a read and every 3 minutes, until the checks are in. Tables: `segments`,
-`segment_blobs` (the bundle, gzipped) and `segment_minutes` (credited seconds per minute; this is what applications
-read). `POST /api/v1/submissions` answers 410 for clients from before segments.
+Records: after each sync a device sends the part of its chain that the server does not hold yet, up to the
+checkpoint of that sync (`POST /api/v1/records`, `internal/client/records`). Each record of a project and each
+idle-timer record is in its private form. Everything else is a leaf hash. The server replays the entries from
+`start_hash` and keeps them only if they end at a stored checkpoint and match every stored checkpoint on the way. A
+SHA-256 chain that ends at a known hash cannot be made up backwards, so what the server keeps is the chain that the
+device signed while it worked. This holds wherever the entries start, so a device that lost part of its log can go
+on after a hole. A record that is not in the private form is kept as its leaf hash only. Tables: `records` (one row
+per seq) and `record_streams` (how far each device's records go).
+
+Counting: the server counts at every mark of the clock (`SEATIME_COUNT_EVERY`, `countLoop` in
+`internal/server/records.go`). One server counts at a time. A mark that was not finished, because the server
+stopped, is counted when a server next looks. For each device that sent records since the last mark, the server
+cuts each project's records into stretches of work, the way a device used to (`pkg/audit` Split and Over): a
+stretch ends in the middle of a pause of 3 hours or more, about 3 hours after its last record. Each stretch is one
+segment. The last stretch of a project is open. It is counted again at every mark with the records that came since,
+and that is why AI time shows within the hour. A stretch that is over is counted again only when its prompts were
+waiting for their check, or when records with a time inside it arrive late. When a stretch comes to hold minutes
+that a segment made after it also holds, that later segment is counted again and gives them up, so that no minute
+counts twice. Nothing about checked time changes between two marks.
+
+Segments: a segment is one stretch of one project's records, as a bundle (`pkg/api` Bundle). The server builds it
+from the records above. A device older than v0.1.14 uploads it itself (`POST /api/v1/segments`), about 3 hours
+after the last record, with an ed25519 signature over the raw 32-byte `sha256(json(bundle with sig=""))`. Either
+way the server checks six things. There is at least one stored checkpoint inside the seq range. `chain.Verify`
+passes, so every stored checkpoint in the range matches. `start_hash` equals the stored checkpoint at `seq_lo-1` (or
+genesis at seq 1). There are no entries after the last stored checkpoint. No event is timestamped more than 5 min
+after the server first received a checkpoint that covers it (this stops backfill). The records span at most 62
+days. The server counts the records itself, with the rule in docs/RULE.md. If a device counted them differently,
+that is not a problem. Any failed check is listed in `problems`, and the segment fails. A failed segment credits
+nothing, and the project shows `failed` with the reason. The server also fails a chain that a device of another
+account sent as well (a copied device key). It takes out minutes that an earlier segment of the same account
+already credits. An uploaded segment whose prompts are waiting for their check is `pending`. It is counted again,
+on a read and every 3 minutes, until the checks are in. Tables: `segments`, `segment_blobs` (the bundle, gzipped)
+and `segment_minutes` (credited seconds per minute; this is what applications read).
+`POST /api/v1/submissions` answers 410 for clients from before segments.
 
 Applications (OAuth 2.0, `oauth.go`): an application must use the authorization code flow with PKCE S256. The
 redirect must match exactly, and `state` is required. A code can be used once, within 60 s. Access tokens last 1 h.
@@ -282,10 +307,11 @@ project). The project is pending until those prompts are checked. It fails if th
 
 Privacy: profiles are public by default. Only the owner and the applications that they approved can read a private
 profile. Hidden projects are never listed or served to anyone else, but their time counts in totals and on the
-leaderboard. No prompt text, shell command or folder path reaches the server in a sync or in a segment. A sync names a project
-that is not a public repo by its folder's name, until the owner gives it another. A
-segment names only the files edited inside the project's git repo, by their path relative to the repo. The editor
-plugin sends Hackatime those paths anyway. Segments are never served.
+leaderboard. No prompt text, shell command or folder path reaches the server in a sync or in the records. A sync names a project
+that is not a public repo by its folder's name, until the owner gives it another. The records
+name only the files edited inside the project's git repo, by their path relative to the repo. The editor
+plugin sends Hackatime those paths anyway. Records are served only to a review tool that holds a review key
+(`SEATIME_REVIEW_KEYS` above).
 
 ## Git integration
 

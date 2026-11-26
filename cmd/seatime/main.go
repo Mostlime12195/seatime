@@ -26,7 +26,7 @@ usage: seatime <command> [flags]
   dash        local web dashboard on 127.0.0.1
   forget      delete prompt text kept on this machine (--project X, --from-now-on)
   statusline  one line for a harness status bar: today's time on this project
-  send        send your records to the server now, without waiting for a stretch of work to be over
+  send        sync and send your records to the server now, without waiting for the next round
   inspect     show exactly what the next sync (or --segment <project>) would send
   emit        plugin protocol: JSON event(s) on stdin
   token       print the local secret for scripts that POST to the daemon (rotate: new secret)
@@ -76,7 +76,7 @@ func main() {
 	case "daemon":
 		err = cmdDaemon(args)
 	case "submit", "verify":
-		err = fmt.Errorf("there is nothing to submit any more: SeaTime sends each project's records once a stretch of work is over, and applications read your hours from the server")
+		err = fmt.Errorf("there is nothing to submit any more: SeaTime sends its records as you work, and applications read your hours from the server")
 	case "inspect":
 		err = cmdInspect(args)
 	case "forget":

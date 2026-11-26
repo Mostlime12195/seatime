@@ -182,7 +182,16 @@ func TestFoldSplitProjects(t *testing.T) {
 			mins = append(mins, SegmentMinute{StartMin: sg.FirstTS.Unix()/60 + int64(j), Human: 50, Hand: 20, Prompts: 1, Models: []ledger.ModelUse{{Model: "m-1", Seconds: 30, Prompts: 1}}})
 			wantChecked += 50
 		}
-		if err := s.PutSegment(ctx, sg, []byte("gz"), mins); err != nil {
+		// as migration 7 holds a segment (PutSegment writes later columns)
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO segments(id,user_id,project_id,device_id,status,problems,claimed,scored,seq_lo,seq_hi,score_ver,first_ts,last_ts,pending,created,checked)
+  VALUES (?,?,?,?,?,'[]','{}','{}',?,?,'',?,?,0,?,?)`, sg.ID, sg.UserID, sg.ProjectID, sg.DeviceID, sg.Status, sg.SeqLo, sg.SeqHi,
+			sg.FirstTS.UnixMilli(), sg.LastTS.UnixMilli(), sg.Created.UnixMilli(), sg.Checked.UnixMilli()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO segment_blobs(id,data) VALUES (?,?)`, sg.ID, []byte("gz")); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.tx(ctx, func(tx *txn) error { return putMinutes(ctx, tx, sg, mins) }); err != nil {
 			t.Fatal(err)
 		}
 	}

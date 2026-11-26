@@ -189,6 +189,13 @@ type Event struct {
 // (RFC 3339). The pipeline turns it into QueuedMS and drops the key.
 const TypedAtKey = "typed_at"
 
+// HoldKey is the Extra key an adapter puts on a prompt, and on the agent
+// start that follows it, when the AI tool's own log will say who sent the
+// prompt but has not been written yet: {"log": path of the log, "id": the
+// prompt's id in it}. The pipeline keeps both back until the log says, and
+// drops the key (package emit, hold.go).
+const HoldKey = "hold"
+
 // RunFacts count what one agent run did, from its tool calls.
 type RunFacts struct {
 	Reads          int `json:"reads,omitempty"`

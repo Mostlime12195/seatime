@@ -26,7 +26,7 @@
     <div class="cell"><b>{{hours .AllStruggle}}<i class="u">h</i></b><span>all time</span></div>
   </div>
 </section>
-{{$u := unck .Unchecked .UncheckedPrompts}}{{if $u}}<p class="unck"><span class="seal">{{$u}} unchecked</span><span>checked about 3 hours after {{if .IsOwner}}you stop{{else}}work stops{{end}}</span></p>{{end}}
+{{$u := unck .Unchecked .UncheckedPrompts}}{{if $u}}<p class="unck"><span class="seal">{{$u}} unchecked</span><span>checked {{cycle}}</span></p>{{end}}
 {{if .PendingMin}}<p class="sub">{{.PendingMin}} min waiting on check</p>{{end}}
 
 <section class="sec">

@@ -233,7 +233,7 @@ func (s *Server) reviewEvidence(ctx context.Context, u *store.User, p *store.Pro
 			out.Devices = append(out.Devices, rd)
 		}
 		rs := api.ReviewSegment{ID: sg.ID, Device: n, Status: sg.Status, Problems: sg.Problems,
-			FirstTS: sg.FirstTS, LastTS: sg.LastTS, Checked: sg.Checked, Minutes: [][3]float64{}, Records: []api.ReviewRecord{}}
+			FirstTS: sg.FirstTS, LastTS: sg.LastTS, Checked: sg.Checked, Open: sg.Open, Minutes: [][3]float64{}, Records: []api.ReviewRecord{}}
 		mins, err := s.store.SegmentMinutesOf(ctx, sg.ID)
 		if err != nil {
 			return nil, err
@@ -297,7 +297,9 @@ func (s *Server) reviewRecord(ctx context.Context, sg *store.Segment, e *event.E
 	if e.Kind == event.Prompt && e.CheckHash != "" {
 		if v, err := s.store.PromptVerdict(ctx, sg.DeviceID, e.CheckHash); err == nil && v != nil {
 			r.Check = &api.ReviewCheck{Pass: v.Pass, Kind: v.Kind, Minutes: v.Minutes, Labels: v.Labels, Skipped: v.Skipped, Rules: v.Rules, Model: v.Model}
-		} else if sg.Status == store.SegPending {
+		} else if sg.Status == store.SegPending || sg.Open && sg.Pending > 0 {
+			// (an open stretch with prompts being checked is not pending:
+			// it is counted again at the next cycle anyway)
 			r.Check = &api.ReviewCheck{Waiting: true}
 		}
 	}

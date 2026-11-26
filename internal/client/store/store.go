@@ -51,11 +51,15 @@ CREATE TABLE IF NOT EXISTS labels(block INTEGER PRIMARY KEY, label TEXT NOT NULL
 -- the prompts already sent, per project, as keyed hashes (definition 2
 -- of the rule); never leaves the machine
 CREATE TABLE IF NOT EXISTS prompts_sent(project TEXT NOT NULL, hash TEXT NOT NULL, PRIMARY KEY(project, hash)) WITHOUT ROWID;
+-- prompts kept back until the AI tool's log says who sent them (held.go)
+CREATE TABLE IF NOT EXISTS held(
+  id INTEGER PRIMARY KEY, session TEXT NOT NULL, prompt_id TEXT NOT NULL, log TEXT NOT NULL,
+  at INTEGER NOT NULL, claimed INTEGER NOT NULL DEFAULT 0, data BLOB NOT NULL);
 `
 
 // schemaVersion is the PRAGMA user_version of schema and checkSchema. A
 // change to them raises it and adds a step to openOnce for older files.
-const schemaVersion = 10
+const schemaVersion = 11
 
 type Store struct {
 	db   *sql.DB

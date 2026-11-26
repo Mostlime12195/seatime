@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"seatime/internal/adapters/claudecode"
 	"seatime/internal/client/checks"
 	"seatime/internal/client/logx"
 	"seatime/internal/client/presence"
@@ -43,10 +44,14 @@ type Pipeline struct {
 	// (its name, file names, README) in its folder at a prompt, before the
 	// AI changes anything for it. Only the hook sets it, as Repo.
 	Facts func(root, name string) *promptcheck.Project
+	// Sender reads from an AI tool's own log who sent a prompt (hold.go):
+	// kind is "human" for a person, seen is false while the log does not
+	// hold the prompt yet. nil: nothing is held.
+	Sender func(log, promptID string) (kind string, seen bool)
 }
 
 func New(st *store.Store, home string) *Pipeline {
-	p := &Pipeline{Store: st, Res: project.New(home), Now: time.Now}
+	p := &Pipeline{Store: st, Res: project.New(home), Now: time.Now, Sender: claudecode.SentBy}
 	// a folder keeps the project it was first seen as (store folders.go)
 	p.Res.Keep = func(folder, label string) string {
 		key, err := st.FolderKey(folder, label)
@@ -98,12 +103,35 @@ func (p *Pipeline) Emit(e event.Event) error {
 	return err
 }
 
-// EmitEvent is Emit that also returns the stored event.
+// EmitEvent is Emit that also returns the stored event. A prompt that is
+// kept back until the AI tool's log says who sent it (hold.go) returns no
+// event; so does a record that waits behind it.
 func (p *Pipeline) EmitEvent(e event.Event) (event.Event, error) {
 	now := p.Now()
 	if e.TS.IsZero() {
 		e.TS = now
 	}
+	hold := takeHold(&e)
+	if e.SessionID != "" {
+		if hold != nil && e.Kind != event.Prompt {
+			// a record of the hook call that holds a prompt back: behind it
+			if ok, err := p.Store.HeldJoin(e.SessionID, hold.id, e); err == nil && ok {
+				return event.Event{}, nil
+			}
+		} else {
+			// the session's held prompts first: by now its log normally
+			// says who sent them
+			p.releaseSession(e.SessionID, now)
+		}
+	}
+	return p.emit(e, hold, nil)
+}
+
+// emit records one event. hold is set for a prompt to keep back; got is
+// what was read when a prompt now released was kept back.
+func (p *Pipeline) emit(e event.Event, hold *holdMark, got *store.Held) (event.Event, error) {
+	now := p.Now()
+	raw := e
 	cwd := e.CWD
 	var cwdInfo project.Info
 	if cwd != "" {
@@ -234,6 +262,30 @@ func (p *Pipeline) EmitEvent(e event.Event) (event.Event, error) {
 			e.Extra = nil
 		}
 	}
+	root := ""
+	if e.Kind == event.Prompt || e.Kind == event.AgentStop || e.Kind == event.SessionEnd {
+		for _, i := range infos {
+			if i.Key == key {
+				root = i.Root
+			}
+		}
+		if root == "" && cwdInfo.Key == key {
+			root = cwdInfo.Root
+		}
+		if root == "" && key != "" {
+			if pr, ok, _ := p.Store.GetProject(key); ok {
+				root = pr.Root
+			}
+		}
+	}
+	// --- a prompt to keep back until the tool's log says who sent it ---
+	if hold != nil && e.Kind == event.Prompt && p.Sender != nil {
+		if err := p.hold(raw, hold, root, key, now); err == nil {
+			return event.Event{}, nil
+		} else {
+			logx.Printf("prompt: could not keep it back (%v); recorded as it came", err)
+		}
+	}
 	// --- prompt: words and "new" (docs/RULE.md, definition 2), decided once, here ---
 	var kept checks.Text
 	if e.Kind == event.Prompt && e.Text != "" && !chain.IsCommitted(e.Text) {
@@ -254,22 +306,6 @@ func (p *Pipeline) EmitEvent(e event.Event) (event.Event, error) {
 			}
 		}
 	}
-	root := ""
-	if e.Kind == event.Prompt || e.Kind == event.AgentStop || e.Kind == event.SessionEnd {
-		for _, i := range infos {
-			if i.Key == key {
-				root = i.Root
-			}
-		}
-		if root == "" && cwdInfo.Key == key {
-			root = cwdInfo.Root
-		}
-		if root == "" && key != "" {
-			if pr, ok, _ := p.Store.GetProject(key); ok {
-				root = pr.Root
-			}
-		}
-	}
 	switch e.Kind {
 	case event.Prompt:
 		p.promptFacts(&e)
@@ -283,12 +319,20 @@ func (p *Pipeline) EmitEvent(e event.Event) (event.Event, error) {
 	stored, err := p.Store.Append(e)
 	if err == nil {
 		var snap *promptcheck.Snapshot
-		if p.Snap != nil && root != "" && (e.Kind == event.Prompt || e.Kind == event.AgentStop || e.Kind == event.SessionEnd) {
-			snap = p.Snap(root)
-		}
 		var info *promptcheck.Project
-		if p.Facts != nil && root != "" && e.Kind == event.Prompt && kept.Text != "" {
-			info = p.Facts(root, projectName(p.Store.Label(key)))
+		if got != nil {
+			// a prompt that was kept back: as its folder was when it was sent
+			snap = got.Snap
+			if kept.Text != "" {
+				info = got.Info
+			}
+		} else {
+			if p.Snap != nil && root != "" && (e.Kind == event.Prompt || e.Kind == event.AgentStop || e.Kind == event.SessionEnd) {
+				snap = p.Snap(root)
+			}
+			if p.Facts != nil && root != "" && e.Kind == event.Prompt && kept.Text != "" {
+				info = p.Facts(root, projectName(p.Store.Label(key)))
+			}
 		}
 		if terr := checks.Track(p.Store, stored, kept, reply, snap, info, now); terr != nil {
 			logx.Printf("prompt check: keeping the turn failed: %v", terr)

@@ -168,24 +168,44 @@ func handle(hookEvent string, stdin []byte, sink common.Sink) error {
 	case "UserPromptSubmit":
 		// Claude Code fires this hook for prompts the tool makes itself
 		// too: a scheduled task or /loop iteration, a background task or
-		// subagent reporting back, a message from another session. Its
-		// payload has no field saying which (docs checked 2026-11-21). A
-		// report from a background task is known by its text (toolSent):
-		// nobody wrote it, so it is not recorded as a prompt, and only the
-		// run it starts is. The others are recorded as prompts like any other.
+		// subagent reporting back, a message from another session or a
+		// channel. The hook's payload does not say who sent the prompt.
+		// Claude Code's session log does (SentBy), but it writes the
+		// prompt there only after this hook has returned (checked on
+		// 2.1.332). So the prompt and the agent start are marked to be
+		// held (event.HoldKey): the pipeline records them once the log
+		// says who sent the prompt, and records no prompt when it was not
+		// a person. An older Claude Code gives no prompt id: its prompts
+		// are recorded at once, except a background task's report, which
+		// is known by its text (toolSent).
 		if toolSent(common.Str(p, "prompt")) {
 			return emit(event.AgentStart, nil)
+		}
+		var hold map[string]any
+		if id, log := common.Str(p, "prompt_id"), common.Str(p, "transcript_path"); id != "" && log != "" {
+			hold = map[string]any{"log": log, "id": id}
 		}
 		if err := emit(event.Prompt, func(e *event.Event) {
 			e.Text = common.Str(p, "prompt")
 			e.OtherStopHook = otherStopHook(base.CWD)
+			e.Extra = map[string]any{}
 			if at, ok := TypedAt(common.Str(p, "transcript_path"), base.SessionID, e.Text); ok {
-				e.Extra = map[string]any{event.TypedAtKey: at.Format(time.RFC3339Nano)} // the pipeline turns it into QueuedMS
+				e.Extra[event.TypedAtKey] = at.Format(time.RFC3339Nano) // the pipeline turns it into QueuedMS
+			}
+			if hold != nil {
+				e.Extra[event.HoldKey] = hold
+			}
+			if len(e.Extra) == 0 {
+				e.Extra = nil
 			}
 		}); err != nil {
 			return err
 		}
-		return emit(event.AgentStart, nil)
+		return emit(event.AgentStart, func(e *event.Event) {
+			if hold != nil {
+				e.Extra = map[string]any{event.HoldKey: hold}
+			}
+		})
 	case "Stop":
 		if sub {
 			return nil
@@ -331,6 +351,68 @@ func OtherStopHookIn(settings []byte) bool {
 // <task-notification> block (seen in its session logs, 2026-11-25).
 func toolSent(prompt string) bool {
 	return strings.HasPrefix(strings.TrimSpace(prompt), "<task-notification>")
+}
+
+// Human is the sender Claude Code's log gives a prompt a person sent.
+const Human = "human"
+
+// SentBy reads from Claude Code's session log who sent a prompt. Every
+// line the log writes for a prompt carries its id, and the line of the
+// prompt itself says where it came from:
+//
+//	{"type":"user","promptId":"...","origin":{"kind":"human"},"promptSource":"typed",...}
+//
+// kind is "human" for a prompt a person sent. Anything else is a message
+// the tool made: "task-notification" (a background task or subagent
+// reporting back), "channel", "peer", "coordinator" (other sessions),
+// "auto-continuation", "plugin" and more. seen is false while the log has
+// no line of that prompt yet (Claude Code writes it once the prompt's
+// hooks have returned). kind is "" when the prompt is there and the log
+// names no sender: an older Claude Code, or `claude -p`. Only the last
+// 8 MB of the log are read.
+func SentBy(path, promptID string) (kind string, seen bool) {
+	if path == "" || promptID == "" {
+		return "", false
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+	if fi, err := f.Stat(); err == nil && fi.Size() > 8<<20 {
+		f.Seek(fi.Size()-8<<20, io.SeekStart)
+	}
+	return sentByIn(io.LimitReader(f, 8<<20), promptID)
+}
+
+func sentByIn(r io.Reader, promptID string) (kind string, seen bool) {
+	id := []byte(promptID)
+	br := bufio.NewReaderSize(r, 64<<10)
+	for {
+		line, err := br.ReadBytes('\n') // a line of any length: the reader is capped
+		if len(line) == 0 && err != nil {
+			break
+		}
+		if !bytes.Contains(line, id) {
+			if err != nil {
+				break
+			}
+			continue
+		}
+		var l struct {
+			Type     string
+			PromptID string
+			Origin   *struct{ Kind string }
+		}
+		if json.Unmarshal(line, &l) != nil || l.Type != "user" || l.PromptID != promptID {
+			continue
+		}
+		seen = true
+		if l.Origin != nil && l.Origin.Kind != "" {
+			return l.Origin.Kind, true
+		}
+	}
+	return "", seen
 }
 
 // TypedAt reads when a prompt was typed, if Claude Code held it in its

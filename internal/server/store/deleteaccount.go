@@ -52,6 +52,8 @@ func (s *DB) DeleteAccount(ctx context.Context, uid int64, uninstall []string, n
 		for _, d := range devs {
 			for _, q := range []string{
 				`DELETE FROM checkpoints WHERE device_id=?`,
+				`DELETE FROM records WHERE device_id=?`,
+				`DELETE FROM record_streams WHERE device_id=?`,
 				`DELETE FROM prompt_verdicts WHERE device_id=?`,
 				`DELETE FROM prompt_chain WHERE device_id=?`,
 				`DELETE FROM device_health WHERE device_id=?`,

@@ -110,7 +110,7 @@ Each project in an answer has:
 
 A project is **pending** when:
 
-- recent work is not checked yet. A computer sends the records of a stretch about 3 hours after the person stops working on the project, so today's work is usually pending;
+- recent work is not checked yet. Once an hour, on the hour, the server checks the records that the person's computer has sent. So the work of the last hour is usually pending;
 - prompts are waiting for the AI check;
 - the server asked the person's computer for prompts from a stretch when the AI check was off (below).
 

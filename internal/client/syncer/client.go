@@ -162,6 +162,20 @@ func (c *Client) PromptHashes(ctx context.Context, req api.PromptHashesReq) (api
 	return r, err
 }
 
+// Records sends a part of this device's chain (or, with no entries, asks
+// how far the server holds it). On a 409 the answer still says how far.
+func (c *Client) Records(ctx context.Context, req api.RecordsReq) (api.RecordsResp, error) {
+	var r api.RecordsResp
+	cc := *c
+	cc.HTTP = &http.Client{Timeout: 5 * time.Minute}
+	_, err := cc.do(ctx, "/api/v1/records", req, &r)
+	var he *HTTPError
+	if errors.As(err, &he) && he.Status == http.StatusConflict {
+		_ = json.Unmarshal([]byte(he.Body), &r)
+	}
+	return r, err
+}
+
 // Segment uploads one stretch of a project's records for the server to check.
 func (c *Client) Segment(ctx context.Context, b api.Bundle) (api.SegmentResp, error) {
 	var r api.SegmentResp

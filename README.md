@@ -67,7 +67,7 @@ If your editor has the WakaTime or Hackatime plugin, SeaTime reads its heartbeat
 
 Applications, such as the site of a Hack Club YSWS program, read your hours from SeaTime the way that they read them from Hackatime. The first time that an application connects, SeaTime shows you what it would see (your project names, hours and commit list). Then it asks you whether to allow it. You can take that permission back in Settings. You do not need to submit anything.
 
-Each computer sends the records of a project about 3 hours after you stop working on it. The server checks them against the hashes that your computer sent while you worked. Then it counts the hours again. Applications read those checked hours, with a status: verified, pending (not checked yet) or failed (some records did not match). [YSWS.md](YSWS.md) is for people who build applications.
+Each computer sends its records as you work. Every hour, on the hour, the server checks the new records against the hashes that your computer sent while you worked, and it counts the hours itself. It does this whether or not your computer is still on. Applications read those checked hours, with a status: verified, pending (not checked yet) or failed (some records did not match). [YSWS.md](YSWS.md) is for people who build applications.
 
 ## Running a server
 

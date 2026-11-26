@@ -100,6 +100,9 @@ type ReviewSegment struct {
 	FirstTS  time.Time `json:"first_ts"`
 	LastTS   time.Time `json:"last_ts"`
 	Checked  time.Time `json:"checked"`
+	// Open: the stretch of work is not over. The server counts it again at
+	// each of its cycles, with the records that came since.
+	Open bool `json:"open,omitempty"`
 	// Minutes: [the minute's start in unix seconds, counted seconds, the
 	// agent's seconds that did not count]. Empty for a failed segment.
 	Minutes [][3]float64   `json:"minutes"`

@@ -20,7 +20,7 @@ import (
 // with one line per field explaining it from the wire allowlist (WIRE.md).
 func cmdInspect(args []string) error {
 	fs := newFlagSet("inspect")
-	sub := fs.String("segment", "", "show this project's records as a segment, as the daemon uploads them, instead of the next sync")
+	sub := fs.String("segment", "", "show this project's records in the form the daemon sends them in, instead of the next sync")
 	onlyJSON := fs.Bool("json", false, "print only the exact JSON bodies")
 	onlyFields := fs.Bool("fields", false, "print only the field list, not the JSON")
 	beats := fs.String("heartbeats", "", "print the heartbeats a segment of this project carries, under Hackatime's field names")
@@ -57,7 +57,7 @@ func cmdInspect(args []string) error {
 			return writeHeartbeats(os.Stdout, prep.Bundle)
 		}
 		bodies = append(bodies, prep.Bundle)
-		what = fmt.Sprintf("All of %s's records as one segment, as the daemon sends them to %s/api/v1/segments once a stretch of work is over", *sub, auth.APIBase(config.Load()))
+		what = fmt.Sprintf("All of %s's records in the form the daemon sends them in, after each sync, to %s/api/v1/records (shown here as one segment of that project)", *sub, auth.APIBase(config.Load()))
 	} else {
 		plan, ok, err := (&syncer.Syncer{Store: st, Version: version, Auth: &auth}).Next()
 		if err != nil {

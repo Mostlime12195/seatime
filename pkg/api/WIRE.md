@@ -2,11 +2,11 @@
 
 Every field SeaTime can send to the server, with what it means. A test (`pkg/api/wire_test.go`) fails if a wire type gains a field that is not listed here, so this list cannot fall behind the code. `seatime inspect` prints the exact bytes of the next sync.
 
-Never sent, by a sync or a segment: prompt text, folder paths, shell commands, window titles, keystrokes, screenshots, and no file path outside the project's git repo or absolute path. `inspect_test.go` and `segment_test.go` plant each of them in a log and fail if any appears in what would be sent.
+Never sent, by a sync or with your records: prompt text, folder paths, shell commands, window titles, keystrokes, screenshots, and no file path outside the project's git repo or absolute path. `inspect_test.go`, `segment_test.go` and `records_test.go` plant each of them in a log and fail if any appears in what would be sent.
 
-A project's folder name is sent, as the project's name in a sync (`sync.projects[].name`): the name of the folder, never the path to it. A segment does not name the folder.
+A project's folder name is sent, as the project's name in a sync (`sync.projects[].name`): the name of the folder, never the path to it. A record does not name the folder.
 
-Prompt text is the one exception, and only while the server's prompt check is switched on (it is off unless the server turns it on; `seatime status` says when it is on). Then each prompt that is not an exact repeat is sent for the check, with the AI's reply before it, a short excerpt of the code change after it, and three facts about the project: its name, some of its file names and the start of its README. All of it is sent for the check, never kept: the server passes it to the checking model (OpenRouter, with providers that keep no data), stores only the yes/no answers, the prompt's hash and the model's name, and drops the rest. It never goes into a sync, a segment, the server's database or its logs. The tests above still fail if text shows up in a sync or a segment, and `promptcheck_test.go` in the server fails if any of it reaches the database or the log. A segment does name the files you edited inside the project's git repo, by their path in the repo (`src/app.go`), next to the editor heartbeats; your editor plugin already sends those paths, in full, to Hackatime.
+Prompt text is the one exception, and only while the server's prompt check is switched on (it is off unless the server turns it on; `seatime status` says when it is on). Then each prompt that is not an exact repeat is sent for the check, with the AI's reply before it, a short excerpt of the code change after it, and three facts about the project: its name, some of its file names and the start of its README. All of it is sent for the check, never kept: the server passes it to the checking model (OpenRouter, with providers that keep no data), stores only the yes/no answers, the prompt's hash and the model's name, and drops the rest. It never goes into a sync, into the records that are sent, into the server's database or into its logs. The tests above still fail if text shows up in a sync or in the records sent, and `promptcheck_test.go` in the server fails if any of it reaches the database or the log. The records do name the files you edited inside the project's git repo, by their path in the repo (`src/app.go`), next to the editor heartbeats; your editor plugin already sends those paths, in full, to Hackatime.
 
 ## Every 60 to 120 seconds while you work (sync)
 
@@ -85,9 +85,84 @@ The background service checks in with the server, with or without new work. Its 
 - `login.prev_signed_at`: the time of that request
 - `login.prev_sig`: a signature of that request with this computer's key, which shows that it comes from the same computer
 
-## Once a stretch of work on a project is over (segment)
+## As you work, after each sync (records)
 
-About 3 hours after you stop working on a project (90 minutes with nothing new, then 75 minutes for the idle timer's last window to close), SeaTime sends that stretch of the project's records, and the idle-timer records in the same range, so the server can check them against the hashes it received while you worked and count the hours again. Applications you connect read the hours it counts. Every project goes up this way; nothing waits for you to send it. Each record goes in its private form: prompt text, shell commands, file paths, the folder and tool extras are replaced by a commitment (the hash chain needs them to verify; they cannot be read back), and the project is named by its server key. Beside each editor heartbeat on a file inside the project's git repo goes that file's path in the repo, so a segment names files as Hackatime does; files outside the repo, and every path the AI agent touches, stay commitments. Every commitment and prompt fingerprint is an HMAC-SHA-256 under a random key made when SeaTime first ran on this machine. The key never leaves the machine, so nobody can find a short prompt such as "yes" or "fix it" by hashing a word list; two of your own prompts still compare equal. Records of other projects go as a bare fingerprint. Records written by SeaTime versions before this form are not sent at all. Records written before rule `heartbeat/1` may also carry four fields this version never sets (`chars`, `text_hash`, `novelty`, `sim_prev`): they go as they were written, because the hash chain commits to them.
+After each sync, SeaTime sends the records that your local log gained since the last time. The server then holds the log behind the fingerprints of your syncs, and it can count your hours on its own clock, whether or not this computer is still on. Applications that you connect read the hours that it counts. Every project's records go up this way; nothing waits for you to send it. Each record goes in its private form: prompt text, shell commands, file paths, the folder and tool extras are replaced by a commitment (the hash chain needs them to verify; they cannot be read back), and the project is named by its server key. Beside each editor heartbeat on a file inside its project's git repo goes that file's path in the repo, so the records name files as Hackatime does; files outside the repo, and every path the AI agent touches, stay commitments. Every commitment and prompt fingerprint is an HMAC-SHA-256 under a random key made when SeaTime first ran on this machine. The key never leaves the machine, so nobody can find a short prompt such as "yes" or "fix it" by hashing a word list; two of your own prompts still compare equal. A record of no project goes as a bare fingerprint, and so does every record written by a SeaTime version from before this form. Records written before rule `heartbeat/1` may also carry four fields this version never sets (`chars`, `text_hash`, `novelty`, `sim_prev`): they go as they were written, because the hash chain commits to them.
+
+- `records.device_id`: random id of this installation
+- `records.start_hash`: chain fingerprint just before the first record sent
+- `records.from`: position in your local log of the first record this computer has to send (a number)
+- `records.entries`: the records of your local log that the server does not hold yet, in order, up to the last sync
+- `records.entries[].event`: a record of a project, or one of the idle timer's (fields below)
+- `records.entries[].event.backfilled`: the record was recovered from the AI tool's own log because its hooks were silent
+- `records.entries[].event.category`: the editor plugin's category for an editor heartbeat, such as coding or ai coding (the same word Hackatime receives)
+- `records.entries[].event.canon`: which chain form the record uses (3: private, with commitments keyed to this machine)
+- `records.entries[].event.command`: never the command: only its keyed commitment
+- `records.entries[].event.cwd`: never the folder: only its keyed commitment
+- `records.entries[].event.deletions`: lines removed by a commit
+- `records.entries[].event.exit_code`: the command's exit code
+- `records.entries[].event.extra`: never the extras: only one keyed commitment of all of them
+- `records.entries[].event.files`: only one keyed commitment of the file paths (the repo-relative name of an editor heartbeat's file goes beside the record, see `records.entries[].path`)
+- `records.entries[].event.files_changed`: files touched by a commit
+- `records.entries[].event.harness`: which AI tool or editor
+- `records.entries[].event.idle_src`: which idle timer was read (ioreg, win32...) on an idle record
+- `records.entries[].event.insertions`: lines added by a commit
+- `records.entries[].event.kind`: what happened: prompt, agent_start, agent_stop, tool, edit, commit, run, idle...
+- `records.entries[].event.lines`: lines in an editor heartbeat
+- `records.entries[].event.lineno`: the cursor's line number in an editor heartbeat (a number, never the line)
+- `records.entries[].event.cursorpos`: the cursor's column in an editor heartbeat (a number, never the text)
+- `records.entries[].event.model`: AI model name, when the tool reports it
+- `records.entries[].event.new`: whether a prompt was new (4 words or more, not sent before in this project); your machine decides it and keeps the list of sent prompts as keyed fingerprints that never leave it
+- `records.entries[].event.check_hash`: only while the prompt check is on: a salted SHA-256 hash of a prompt that is not a repeat. The salt stays on your machine until the prompt is sent for its check, so the hash cannot be matched against a word list
+- `records.entries[].event.no_input`: start and end times of stretches with no keyboard or mouse input (never what was typed)
+- `records.entries[].event.note`: on a chain-restart record: why the log was restarted (such records go as a fingerprint only)
+- `records.entries[].event.prev_seq`: on a chain-restart record: the checkpoint the new log continues from (such records go as a fingerprint only)
+- `records.entries[].event.project`: the project's server key (a public repo path, or local: plus a hash); never the folder name
+- `records.entries[].event.run_kind`: test, build, dev or exec
+- `records.entries[].event.seq`: position in your local log
+- `records.entries[].event.session_id`: the AI tool's session id (random)
+- `records.entries[].event.sha`: commit id
+- `records.entries[].event.text`: never the prompt text: only its keyed commitment
+- `records.entries[].event.tool`: which agent tool ran (Edit, Bash...)
+- `records.entries[].event.ts`: when
+- `records.entries[].event.window_ms`: length of an idle record's window
+- `records.entries[].event.words`: prompt length in words
+- `records.entries[].event.write`: whether the tool wrote a file
+- `records.entries[].event.line_additions`: lines your editor plugin says an edit added (a number; the plugin sends the same to Hackatime)
+- `records.entries[].event.line_deletions`: lines your editor plugin says an edit removed (a number)
+- `records.entries[].event.presence`: how presence was measured on this device, one of four fixed phrases: input+front window, input only, terminal only, not measured
+- `records.entries[].event.input_before_ms`: on a prompt, milliseconds since the computer last saw keyboard or mouse input (never which key or where)
+- `records.entries[].event.terminal_idle_s`: on a prompt from a terminal over SSH or without a desktop, seconds since keys last reached that terminal, in 8-second steps (never which keys)
+- `records.entries[].event.front_window`: on a prompt, only if you switched the front-window check on: yes, no, or no window attached. Never the name of any program
+- `records.entries[].event.session_prompts`: on a prompt, how many prompts the AI tool's session has had so far
+- `records.entries[].event.other_stop_hook`: on a prompt, whether another hook that can re-prompt the agent is installed in the AI tool (yes or no, never which)
+- `records.entries[].event.queued_ms`: on a prompt you typed while the agent was still running, how long the AI tool held it before sending it (milliseconds, from the tool's own log; never the text)
+- `records.entries[].event.input_slices`: on an idle record, for each minute checked every 5 seconds while you worked on a project: the minute and twelve yes-or-no marks, one per 5 seconds, for whether there was keyboard or mouse input
+- `records.entries[].event.front_slices`: on an idle record, only while the front-window check is on: for each minute checked every 5 seconds, the minute and twelve yes-or-no marks for whether the AI tool's own window was in front (never which program was)
+- `records.entries[].event.run`: on an agent stop, counts of what the run did (fields below)
+- `records.entries[].event.run.reads`: files the agent read (a count)
+- `records.entries[].event.run.writes`: file writes the agent made (a count)
+- `records.entries[].event.run.commands`: commands the agent ran (a count, never the command)
+- `records.entries[].event.run.commands_failed`: of those, how many failed
+- `records.entries[].event.run.searches`: searches the agent ran in the code (a count)
+- `records.entries[].event.run.web`: web fetches and searches (a count)
+- `records.entries[].event.run.other`: other tool calls (a count)
+- `records.entries[].event.run.files_inside`: distinct files written inside the project (a count, never names)
+- `records.entries[].event.run.files_outside`: distinct files written outside the project (a count, never names)
+- `records.entries[].event.run.lines_written`: lines the agent wrote (a count)
+- `records.entries[].event.git`: on an agent stop, the repository's uncommitted changes and its current commit (fields below)
+- `records.entries[].event.git.files_changed`: files changed since the last commit (a count)
+- `records.entries[].event.git.insertions`: lines added since the last commit
+- `records.entries[].event.git.deletions`: lines removed since the last commit
+- `records.entries[].event.git.head`: the current commit id (as in `sync.commits[].sha`)
+- `records.entries[].event.prompt_in_log`: on an agent stop, whether the run's prompt was found in the AI tool's own session log (yes or no)
+- `records.entries[].path`: the file's path inside the project's git repo (such as `src/app.go`), only beside an editor heartbeat on a file in the repo; never an absolute path, a folder name above the repo, or a file outside it. Your editor plugin sends the same path to Hackatime
+- `records.entries[].leaf`: fingerprint of a record that is not sent in full: one of no project, or one written before the private form (its contents are not sent)
+- `records.entries[].seq`: position in your local log
+
+## Only to a server that does not take records: once a stretch of work on a project is over (segment)
+
+An older server, which does not take records this way, gets them later and in pieces: about 3 hours after you stop working on a project, that stretch of the project's records and the idle-timer records of the same time, in the same private form. Records of other projects go as a bare fingerprint.
 
 - `segment.claimed`: your totals for the project, as your machine counted them (same fields as a sync bucket)
 - `segment.claimed.ai_not_counted_seconds`: your total: seconds of the AI agent's work that did not count
@@ -105,73 +180,7 @@ About 3 hours after you stop working on a project (90 minutes with nothing new, 
 - `segment.claimed.runs`: your total: how many test, build or run commands
 - `segment.claimed.start`: your total: the minute (UTC)
 - `segment.device_id`: random id of this installation
-- `segment.entries`: the project's records from your local log, in order
-- `segment.entries[].event`: a record of the project (fields below)
-- `segment.entries[].event.backfilled`: the record was recovered from the AI tool's own log because its hooks were silent
-- `segment.entries[].event.category`: the editor plugin's category for an editor heartbeat, such as coding or ai coding (the same word Hackatime receives)
-- `segment.entries[].event.canon`: which chain form the record uses (3: private, with commitments keyed to this machine)
-- `segment.entries[].event.command`: never the command: only its keyed commitment
-- `segment.entries[].event.cwd`: never the folder: only its keyed commitment
-- `segment.entries[].event.deletions`: lines removed by a commit
-- `segment.entries[].event.exit_code`: the command's exit code
-- `segment.entries[].event.extra`: never the extras: only one keyed commitment of all of them
-- `segment.entries[].event.files`: only one keyed commitment of the file paths (the repo-relative name of an editor heartbeat's file goes beside the record, see `segment.entries[].path`)
-- `segment.entries[].event.files_changed`: files touched by a commit
-- `segment.entries[].event.harness`: which AI tool or editor
-- `segment.entries[].event.idle_src`: which idle timer was read (ioreg, win32...) on an idle record
-- `segment.entries[].event.insertions`: lines added by a commit
-- `segment.entries[].event.kind`: what happened: prompt, agent_start, agent_stop, tool, edit, commit, run, idle...
-- `segment.entries[].event.lines`: lines in an editor heartbeat
-- `segment.entries[].event.lineno`: the cursor's line number in an editor heartbeat (a number, never the line)
-- `segment.entries[].event.cursorpos`: the cursor's column in an editor heartbeat (a number, never the text)
-- `segment.entries[].event.model`: AI model name, when the tool reports it
-- `segment.entries[].event.new`: whether a prompt was new (4 words or more, not sent before in this project); your machine decides it and keeps the list of sent prompts as keyed fingerprints that never leave it
-- `segment.entries[].event.check_hash`: only while the prompt check is on: a salted SHA-256 hash of a prompt that is not a repeat. The salt stays on your machine until the prompt is sent for its check, so the hash cannot be matched against a word list
-- `segment.entries[].event.no_input`: start and end times of stretches with no keyboard or mouse input (never what was typed)
-- `segment.entries[].event.note`: on a chain-restart record: why the log was restarted (such records are not sent)
-- `segment.entries[].event.prev_seq`: on a chain-restart record: the checkpoint the new log continues from (such records are not sent)
-- `segment.entries[].event.project`: the project's server key (a public repo path, or local: plus a hash); never the folder name
-- `segment.entries[].event.run_kind`: test, build, dev or exec
-- `segment.entries[].event.seq`: position in your local log
-- `segment.entries[].event.session_id`: the AI tool's session id (random)
-- `segment.entries[].event.sha`: commit id
-- `segment.entries[].event.text`: never the prompt text: only its keyed commitment
-- `segment.entries[].event.tool`: which agent tool ran (Edit, Bash...)
-- `segment.entries[].event.ts`: when
-- `segment.entries[].event.window_ms`: length of an idle record's window
-- `segment.entries[].event.words`: prompt length in words
-- `segment.entries[].event.write`: whether the tool wrote a file
-- `segment.entries[].event.line_additions`: lines your editor plugin says an edit added (a number; the plugin sends the same to Hackatime)
-- `segment.entries[].event.line_deletions`: lines your editor plugin says an edit removed (a number)
-- `segment.entries[].event.presence`: how presence was measured on this device, one of four fixed phrases: input+front window, input only, terminal only, not measured
-- `segment.entries[].event.input_before_ms`: on a prompt, milliseconds since the computer last saw keyboard or mouse input (never which key or where)
-- `segment.entries[].event.terminal_idle_s`: on a prompt from a terminal over SSH or without a desktop, seconds since keys last reached that terminal, in 8-second steps (never which keys)
-- `segment.entries[].event.front_window`: on a prompt, only if you switched the front-window check on: yes, no, or no window attached. Never the name of any program
-- `segment.entries[].event.session_prompts`: on a prompt, how many prompts the AI tool's session has had so far
-- `segment.entries[].event.other_stop_hook`: on a prompt, whether another hook that can re-prompt the agent is installed in the AI tool (yes or no, never which)
-- `segment.entries[].event.queued_ms`: on a prompt you typed while the agent was still running, how long the AI tool held it before sending it (milliseconds, from the tool's own log; never the text)
-- `segment.entries[].event.input_slices`: on an idle record, for each minute checked every 5 seconds while you worked on a project: the minute and twelve yes-or-no marks, one per 5 seconds, for whether there was keyboard or mouse input
-- `segment.entries[].event.front_slices`: on an idle record, only while the front-window check is on: for each minute checked every 5 seconds, the minute and twelve yes-or-no marks for whether the AI tool's own window was in front (never which program was)
-- `segment.entries[].event.run`: on an agent stop, counts of what the run did (fields below)
-- `segment.entries[].event.run.reads`: files the agent read (a count)
-- `segment.entries[].event.run.writes`: file writes the agent made (a count)
-- `segment.entries[].event.run.commands`: commands the agent ran (a count, never the command)
-- `segment.entries[].event.run.commands_failed`: of those, how many failed
-- `segment.entries[].event.run.searches`: searches the agent ran in the code (a count)
-- `segment.entries[].event.run.web`: web fetches and searches (a count)
-- `segment.entries[].event.run.other`: other tool calls (a count)
-- `segment.entries[].event.run.files_inside`: distinct files written inside the project (a count, never names)
-- `segment.entries[].event.run.files_outside`: distinct files written outside the project (a count, never names)
-- `segment.entries[].event.run.lines_written`: lines the agent wrote (a count)
-- `segment.entries[].event.git`: on an agent stop, the repository's uncommitted changes and its current commit (fields below)
-- `segment.entries[].event.git.files_changed`: files changed since the last commit (a count)
-- `segment.entries[].event.git.insertions`: lines added since the last commit
-- `segment.entries[].event.git.deletions`: lines removed since the last commit
-- `segment.entries[].event.git.head`: the current commit id (as in `sync.commits[].sha`)
-- `segment.entries[].event.prompt_in_log`: on an agent stop, whether the run's prompt was found in the AI tool's own session log (yes or no)
-- `segment.entries[].path`: the file's path inside the project's git repo (such as `src/app.go`), only beside an editor heartbeat on a file in the repo; never an absolute path, a folder name above the repo, or a file outside it. Your editor plugin sends the same path to Hackatime
-- `segment.entries[].leaf`: fingerprint of a record that belongs to another project (its contents are not sent)
-- `segment.entries[].seq`: position in your local log
+- `segment.entries`: the project's records from your local log, in order, each with the fields of `records.entries` above
 - `segment.others`: bare times of your counted heartbeats in other projects inside the range: no project, no content. Each gap between heartbeats goes to the project of the one that ends it, so the server needs them to split time as your machine does
 - `segment.others_until`: only while the prompt check is on: for each of those bare times, until when it counted (a time, no content), so the server splits time as your machine does
 - `segment.project`: project key of the project

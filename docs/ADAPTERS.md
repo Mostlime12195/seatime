@@ -42,6 +42,19 @@ model of the log's last assistant entry (`ModelInLog`; subagent entries and `<sy
 ones are skipped). That is the model that made the call, also after `/model` or a
 fallback. A prompt takes the session's last named model, which the client carries forward.
 
+Who sent a prompt (checked on 2.1.332): Claude Code also runs UserPromptSubmit for messages that it makes itself,
+such as a background task or a subagent that reports back, a message from another session or from a channel, and a
+scheduled task. The hook's payload does not say who sent the prompt. The session log does: the line of the prompt
+has `"origin":{"kind":"human"}` for a prompt that a person sent, and another kind (`task-notification`, `channel`,
+`peer`, `coordinator`, `auto-continuation`, ...) for the rest. Claude Code writes that line only after the hook has
+returned, so the hook cannot read it. The hook's `prompt_id` is the line's `promptId`. So SeaTime keeps the prompt
+back, with what the hook read at that moment, and records it once the log says who sent it. That happens at the
+session's next hook, or within a few seconds in the background service (`internal/client/emit/hold.go`). A prompt that a person
+sent is recorded with the time at which it was sent. A message from the tool is not recorded as a prompt; only the
+agent run that it started is. If the log does not say who sent a prompt (an older Claude Code), the prompt is
+recorded as before. The one exception is a background task's report, which is known by its `<task-notification>`
+text.
+
 Headless `claude -p` runs are left out. The docs define no payload field that
 marks them. Hooks inherit the environment of the claude process, so we drop the event
 when `CLAUDE_CODE_ENTRYPOINT` starts with `sdk` or `CLAUDE_CODE_SESSION_ATTENDED`

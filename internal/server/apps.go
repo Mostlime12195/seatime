@@ -105,7 +105,7 @@ func (s *Server) projectStatus(ctx context.Context, u *store.User, p *store.Proj
 		ps.Status, ps.Reason = api.StatusPending, fmt.Sprintf("%d prompt%s wait for the prompt check", pendingPrompts, pluralS(pendingPrompts))
 	case ps.Pending >= 60:
 		ps.Status = api.StatusPending
-		ps.Reason = fmt.Sprintf("%s of recent work is not checked yet; the computer sends it once that stretch of work is over", fmtDur(ps.Pending))
+		ps.Reason = fmt.Sprintf("%s of recent work is not checked yet; the server checks %s", fmtDur(ps.Pending), s.cycleWords())
 	default:
 		ps.Status = api.StatusVerified
 	}

@@ -109,7 +109,9 @@ func loadPages(s *Server) (*pages, error) {
 	funcs := template.FuncMap{
 		"dur":  fmtDur,
 		"unck": uncheckedLabel,
-		"durx": fmtDurHTML,
+		// when the server next checks: "on the hour"
+		"cycle": s.cycleWords,
+		"durx":  fmtDurHTML,
 		// a flag reads "code: detail"; the page sets the two apart
 		"flagk": func(f string) string { k, _, _ := strings.Cut(f, ": "); return k },
 		"flagv": func(f string) string { _, v, _ := strings.Cut(f, ": "); return v },

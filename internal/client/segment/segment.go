@@ -1,6 +1,8 @@
 // Package segment builds a signed pkg/api Bundle for one stretch of one
-// project (a segment), which the daemon uploads once that stretch of work is
-// over (Next) for the server to check against the hash chain: its records
+// project (a segment). The daemon uploads it once that stretch of work is
+// over (Next), but only to a server that does not take records as they
+// are written (package records); `seatime inspect --segment` prints one.
+// The server checks it against the hash chain: its records
 // and the idle-timer records in the range are revealed in their private form
 // (chain.Hide: no prompt text, command, file path, folder or extras; the
 // project by its server key), every other record is a bare leaf hash, and
@@ -78,8 +80,8 @@ func ProjectRoot(st *store.Store, key string) string {
 	return ""
 }
 
-// repoRoot is the project's checkout when it is the top of a git repo, else "".
-func repoRoot(st *store.Store, key string) string {
+// RepoRoot is the project's checkout when it is the top of a git repo, else "".
+func RepoRoot(st *store.Store, key string) string {
 	root := ProjectRoot(st, key)
 	if root == "" || !filepath.IsAbs(root) {
 		return ""
@@ -181,7 +183,7 @@ func Build(st *store.Store, auth config.Auth, o Options) (*Prepared, error) {
 		return nil, err
 	}
 	sum := Summary{Project: o.Project, FirstSeq: min, LastSeq: max, ByKind: map[event.Kind]int{}}
-	repo := repoRoot(st, o.Project)
+	repo := RepoRoot(st, o.Project)
 	var entries []chain.Entry
 	for _, r := range rows {
 		var e event.Event
@@ -282,11 +284,8 @@ func (s Summary) Hours() (hand, ai, notCounted float64) {
 	return s.Claimed.CodingSeconds / 3600, s.Claimed.AISeconds / 3600, s.Claimed.AINotCountedSeconds / 3600
 }
 
-// Others are the bare times of counted heartbeats the submission does not
-// reveal: those in other projects from from to to, and the last
-// counted heartbeat of any project before from. The project's
-// gaps split at them as they do on the device, and its first gap is as
-// long as it is there.
+// Others are the bare times of counted heartbeats the segment does not
+// reveal (audit.Others), from this device's log.
 func Others(st *store.Store, project string, from, to time.Time) ([]time.Time, error) {
 	if from.IsZero() {
 		return nil, nil
@@ -295,27 +294,10 @@ func Others(st *store.Store, project string, from, to time.Time) ([]time.Time, e
 	if err != nil {
 		return nil, err
 	}
-	var out []time.Time
-	var last time.Time
-	for _, h := range ledger.Heartbeats(evs) {
-		switch {
-		case !h.Kept:
-		case h.Time.Before(from):
-			last = h.Time
-		case h.Project != project && !h.Time.After(to):
-			out = append(out, h.Time.UTC().Truncate(time.Millisecond))
-		}
-	}
-	if !last.IsZero() {
-		out = append([]time.Time{last.UTC().Truncate(time.Millisecond)}, out...)
-	}
-	return out, nil
+	return audit.Others(evs, project, from, to), nil
 }
 
-// OthersCap is Others under the cap rule (the prompt check on): the bare
-// times of counted heartbeats the submission does not reveal, and for
-// each how far it counted forward (zero when it did not), cut where the
-// device's count cut it: at the next counted heartbeat of another project.
+// OthersCap is Others under the cap rule (audit.OthersCap).
 func OthersCap(st *store.Store, set *promptcheck.Set, project string, from, to time.Time) (times, until []time.Time, err error) {
 	if from.IsZero() {
 		return nil, nil, nil
@@ -324,40 +306,6 @@ func OthersCap(st *store.Store, set *promptcheck.Set, project string, from, to t
 	if err != nil {
 		return nil, nil, err
 	}
-	var kept []ledger.Heartbeat
-	for _, h := range ledger.HeartbeatsCap(evs, set.Cap(false)) {
-		if h.Kept {
-			kept = append(kept, h)
-		}
-	}
-	reach := func(i int) time.Time {
-		u := kept[i].Until
-		if u.IsZero() {
-			return time.Time{}
-		}
-		for _, n := range kept[i+1:] {
-			if n.Project != kept[i].Project {
-				if n.Time.Before(u) {
-					u = n.Time
-				}
-				break
-			}
-		}
-		return u.UTC().Truncate(time.Millisecond)
-	}
-	last := -1
-	for i, h := range kept {
-		switch {
-		case h.Time.Before(from):
-			last = i
-		case h.Project != project && !h.Time.After(to):
-			times = append(times, h.Time.UTC().Truncate(time.Millisecond))
-			until = append(until, reach(i))
-		}
-	}
-	if last >= 0 {
-		times = append([]time.Time{kept[last].Time.UTC().Truncate(time.Millisecond)}, times...)
-		until = append([]time.Time{reach(last)}, until...)
-	}
+	times, until = audit.OthersCap(evs, set, project, from, to)
 	return times, until, nil
 }

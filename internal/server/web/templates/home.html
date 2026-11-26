@@ -21,7 +21,7 @@
       <div class="cell"><b>{{.Streak}}<i class="u">day{{if ne .Streak 1}}s{{end}}</i></b><span>streak</span></div>
       <div class="cell"><b>{{hours .AllStruggle}}<i class="u">h</i></b><span>all time</span></div>
     </div>
-    {{$u := unck .Unchecked .UncheckedPrompts}}{{if $u}}<p class="unck"><span class="seal">{{$u}} unchecked</span><span>checked about 3 hours after {{if .IsOwner}}you stop{{else}}work stops{{end}}</span></p>{{end}}
+    {{$u := unck .Unchecked .UncheckedPrompts}}{{if $u}}<p class="unck"><span class="seal">{{$u}} unchecked</span><span>checked {{cycle}}</span></p>{{end}}
     {{if .Cards}}<ul class="plist compact">{{range .Cards}}<li><a href="/@{{$.Data.Me.Owner.Username}}/{{.P.Slug}}"><span class="pn">{{.P.Name}}</span><span class="pt">{{dur .Range}}</span>{{if .Pct}}<span class="share" aria-hidden="true"><i style="width:{{.Pct}}%"></i></span>{{end}}</a></li>{{end}}</ul>{{end}}
   {{else}}
     <p class="verse">No time yet. Install SeaTime below, then write some code. Your hours show up here within a few minutes.</p>

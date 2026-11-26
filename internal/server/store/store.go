@@ -281,6 +281,7 @@ type Store interface {
 	PromptChain     // promptchain.go
 	DeviceRequests  // devicereq.go
 	Segments        // segments.go
+	Records         // records.go
 	OAuth           // oauth.go
 	AccountDeletion // deleteaccount.go
 }

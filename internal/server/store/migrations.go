@@ -535,4 +535,54 @@ CREATE TABLE project_links (
   PRIMARY KEY (user_id, name)
 ) WITHOUT ROWID;
 `,
+	// 9: a device sends its records as it writes them (records.go), and the
+	// server cuts and counts each project's stretches itself, on its own
+	// clock. A segment the server made (stream=1) covers its project's
+	// records with a time in [since_ts, until_ts); the last one of a device
+	// and project is open (is_open=1, no until_ts): it is counted again at
+	// each cycle until its stretch of work is over.
+	`
+-- A device's chain as it sent it: every record in its private form, or
+-- as a bare leaf hash (data ''). Kept only once it replayed to a
+-- checkpoint, so it is the chain the checkpoints commit to. prev is the
+-- chain head before the record.
+CREATE TABLE records (
+  device_id TEXT NOT NULL,
+  seq       INTEGER NOT NULL,
+  ts        INTEGER NOT NULL DEFAULT 0,
+  project   TEXT NOT NULL DEFAULT '',
+  kind      TEXT NOT NULL DEFAULT '',
+  leaf      TEXT NOT NULL,
+  prev      TEXT NOT NULL,
+  data      TEXT NOT NULL DEFAULT '',
+  path      TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (device_id, seq)
+) WITHOUT ROWID;
+CREATE INDEX records_ts ON records(device_id, ts);
+CREATE INDEX records_project ON records(device_id, project, ts);
+-- How far each device's records go: head is the last seq held, run_lo the
+-- first seq of the unbroken run that ends there (a device that lost its
+-- log goes on after a hole). dirty is the earliest time among the records
+-- that came since the server last counted (0: none came).
+CREATE TABLE record_streams (
+  device_id TEXT PRIMARY KEY,
+  user_id   INTEGER NOT NULL,
+  head      INTEGER NOT NULL,
+  run_lo    INTEGER NOT NULL,
+  dirty     INTEGER NOT NULL DEFAULT 0,
+  received  INTEGER NOT NULL DEFAULT 0
+) WITHOUT ROWID;
+CREATE INDEX record_streams_dirty ON record_streams(dirty);
+ALTER TABLE segments ADD COLUMN stream INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE segments ADD COLUMN is_open INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE segments ADD COLUMN since_ts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE segments ADD COLUMN until_ts INTEGER NOT NULL DEFAULT 0;
+-- the project key its records carry (the project may go by another now)
+ALTER TABLE segments ADD COLUMN rec_key TEXT NOT NULL DEFAULT '';
+-- the server counts on a cycle (internal/server records.go): when the
+-- last one was claimed, and the mark of the last one that finished
+INSERT INTO kv(name,value) VALUES ('count_claim',0);
+INSERT INTO kv(name,value) VALUES ('count_done',0);
+CREATE INDEX segments_stream ON segments(stream, is_open);
+`,
 }

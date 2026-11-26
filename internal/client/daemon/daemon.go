@@ -27,6 +27,7 @@ import (
 	"seatime/internal/client/gitscan"
 	"seatime/internal/client/idle"
 	"seatime/internal/client/logx"
+	"seatime/internal/client/records"
 	"seatime/internal/client/setup"
 	"seatime/internal/client/spool"
 	"seatime/internal/client/store"
@@ -195,6 +196,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 	go d.gitLoop(ctx)
 	go d.spoolLoop(ctx)
+	go d.heldLoop(ctx)
 	go d.canaryLoop(ctx)
 	go d.healthLoop(ctx)
 	go d.hookLoop(ctx)
@@ -415,6 +417,21 @@ func (d *Daemon) spoolLoop(ctx context.Context) {
 	}
 }
 
+// heldLoop records the prompts hooks kept back until the AI tool's log
+// says who sent them (emit hold.go). A hook does it too, at the session's
+// next record; this is for the moments between.
+func (d *Daemon) heldLoop(ctx context.Context) {
+	for ctx.Err() == nil {
+		sleep(ctx, heldEvery)
+		if ctx.Err() == nil {
+			d.Pipeline.ReleaseHeld(time.Now())
+		}
+	}
+}
+
+// heldEvery is how often the daemon looks at held prompts.
+const heldEvery = 2 * time.Second
+
 // DrainSpool feeds spooled hook events through the pipeline, skipping any
 // that a timed-out hook did manage to store.
 func (d *Daemon) DrainSpool(dir string) (int, error) {
@@ -451,6 +468,12 @@ func (d *Daemon) syncLoop(ctx context.Context) {
 			_ = d.Store.SetMeta("last_sync_error", err.Error())
 		}
 		_ = d.Store.SetMeta(MetaSyncBlocked, blockedMessage(err))
+		if err == nil {
+			// the records behind the checkpoint that sync carried
+			if _, rerr := d.RecordsOnce(ctx); rerr != nil && !errors.Is(rerr, syncer.ErrNotLoggedIn) && !errors.Is(rerr, records.ErrUnsupported) {
+				logx.Printf("records: %v", rerr)
+			}
+		}
 		if woke := sleepWall(ctx, wait, 30*time.Second); woke {
 			fails = 0 // back from sleep or a clock change: try now, not after the old backoff
 			logx.Printf("sync: the clock jumped (sleep/wake or a time change); syncing now")

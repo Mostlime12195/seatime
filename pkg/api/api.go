@@ -191,11 +191,46 @@ type PromptCheckResp struct {
 	CheckHash string `json:"check_hash"`
 }
 
-// ---- segments: a project's records, checked as they arrive ----
+// ---- records: the device's log, sent as it is written ----
+
+// POST /api/v1/records {RecordsReq} -> RecordsResp
+// After each sync the device sends the records of its chain that the
+// server does not hold yet, up to the checkpoint that sync carried. Every
+// record of a project, and every idle-timer record, goes in its private
+// form (chain.Hide: text, commands, paths, folder and extras as
+// commitments, the project as its server key); anything else is a bare
+// leaf hash. The server keeps what replays to a checkpoint it holds, and
+// counts each project's time from it on its own clock (internal/server
+// records.go), whether or not the computer is on.
+type RecordsReq struct {
+	DeviceID string `json:"device_id"`
+	// StartHash is the chain head before Entries[0].
+	StartHash string        `json:"start_hash,omitempty"`
+	Entries   []chain.Entry `json:"entries,omitempty"`
+	// From is the seq of the first record the device has to send. A request
+	// with no entries asks where to go on from.
+	From int64 `json:"from,omitempty"`
+}
+
+// MaxRecords is the most entries one RecordsReq may carry.
+const MaxRecords = 100000
+
+// RecordsResp says how far the server holds the device's records. It is
+// also the body of a 409, for records that do not go on from Head.
+type RecordsResp struct {
+	// Head is the seq of the last record the server holds (0: none).
+	Head int64 `json:"head"`
+	// Next is the seq to send up to next: a checkpoint the server holds.
+	// 0: nothing to send until the next sync.
+	Next int64 `json:"next,omitempty"`
+}
+
+// ---- segments: a stretch of a project's records, from a device ----
 
 // POST /api/v1/segments {Bundle} -> SegmentResp
-// Once a stretch of work on a project is over, the device uploads its
-// records: a contiguous seq range of its chain, ending at a checkpoint the
+// A device older than v0.1.14, which does not send its records as they
+// are written, uploads a project's records once a stretch of work on it is
+// over: a contiguous seq range of its chain, ending at a checkpoint the
 // server holds. Records of the project and the idle-timer records in the
 // range are revealed in their private form (chain.Hide: text, commands,
 // paths, folder and extras as commitments, the project as its server key);

@@ -8,17 +8,46 @@ import (
 
 	"seatime/internal/client/config"
 	"seatime/internal/client/logx"
+	"seatime/internal/client/records"
 	"seatime/internal/client/segment"
 	"seatime/internal/client/syncer"
 )
 
-// segmentLoop uploads each project's records once a stretch of work on it
-// is over (package segment), so the server checks them against the hash
-// chain as they arrive. Nothing needs the person to act.
+// RecordsOnce sends the records the server does not hold yet (package
+// records); the sync loop calls it after each sync. It returns how many
+// went up. A server that does not take records gets each project's
+// stretches from segmentLoop instead.
+func (d *Daemon) RecordsOnce(ctx context.Context) (int, error) {
+	auth, ok := d.auth()
+	if !ok {
+		return 0, syncer.ErrNotLoggedIn
+	}
+	n, err := records.Push(ctx, d.Store, auth, syncer.NewClient(auth.APIBase(config.Load()), auth.Token, d.Version))
+	old := ""
+	if errors.Is(err, records.ErrUnsupported) && !records.Sent(d.Store) {
+		old = "1"
+	}
+	if v, _ := d.Store.GetMeta(metaOldServer); v != old && (err == nil || old == "1") {
+		_ = d.Store.SetMeta(metaOldServer, old)
+	}
+	return n, err
+}
+
+// metaOldServer is "1" while the server has never taken this device's
+// records and says it does not take any.
+const metaOldServer = "records_old_server"
+
+// segmentLoop is for a server that does not take records as they are
+// written: it uploads each project's records once a stretch of work on it
+// is over (package segment). Nothing needs the person to act.
 func (d *Daemon) segmentLoop(ctx context.Context) {
 	sleep(ctx, 2*time.Minute)
 	for ctx.Err() == nil {
 		wait := 10 * time.Minute
+		if v, _ := d.Store.GetMeta(metaOldServer); v != "1" {
+			sleepWall(ctx, wait, 30*time.Second)
+			continue
+		}
 		if _, err := d.SegmentsOnce(ctx, time.Now()); err != nil && !errors.Is(err, syncer.ErrNotLoggedIn) {
 			var he *syncer.HTTPError
 			if errors.As(err, &he) && he.Status == 404 {
@@ -30,10 +59,6 @@ func (d *Daemon) segmentLoop(ctx context.Context) {
 		sleepWall(ctx, wait, 30*time.Second)
 	}
 }
-
-// MetaSegmentUntil holds, per local project key, the end of the last
-// segment the server took (RFC 3339).
-func MetaSegmentUntil(project string) string { return "segment_until:" + project }
 
 // SegmentsOnce uploads every segment that is ready, up to the last synced
 // checkpoint. It returns how many went up.
@@ -67,7 +92,7 @@ func (d *Daemon) segments(ctx context.Context, now time.Time, flush bool) (int, 
 	sent := 0
 	for _, p := range ps {
 		var since time.Time
-		if v, _ := d.Store.GetMeta(MetaSegmentUntil(p.Key)); v != "" {
+		if v, _ := d.Store.GetMeta(segment.MetaUntil(p.Key)); v != "" {
 			since, _ = time.Parse(time.RFC3339, v)
 		}
 		plan := now
@@ -105,7 +130,7 @@ func (d *Daemon) segments(ctx context.Context, now time.Time, flush bool) (int, 
 		if flush && end.After(now) {
 			end = now // records made from now on go in the next segment
 		}
-		_ = d.Store.SetMeta(MetaSegmentUntil(p.Key), end.UTC().Format(time.RFC3339))
+		_ = d.Store.SetMeta(segment.MetaUntil(p.Key), end.UTC().Format(time.RFC3339))
 	}
 	return sent, nil
 }

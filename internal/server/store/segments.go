@@ -9,10 +9,12 @@ import (
 	"seatime/pkg/ledger"
 )
 
-// A segment is one stretch of one project's records from one device: the
-// device uploads it once the stretch is over, and the server checks it
-// against the device's hash chain and counts it (internal/server
-// segments.go). Its credited minutes are what applications read.
+// A segment is one stretch of one project's records from one device. The
+// server cuts it from the records the device sends as it writes them
+// (records.go; Stream), or an older device uploads it once the stretch is
+// over. The server checks it against the device's hash chain and counts
+// it (internal/server segments.go). Its credited minutes are what
+// applications read.
 
 const (
 	SegVerified = "verified"
@@ -38,6 +40,17 @@ type Segment struct {
 	Pending    int // prompts that wait for their check
 	Created    time.Time
 	Checked    time.Time
+	// Stream: the server made it from the records the device sent as it
+	// wrote them. It holds the project's records with a time in [Since,
+	// Until). Open: the stretch of work is not over (no Until); the server
+	// counts it again at each cycle.
+	Stream bool
+	Open   bool
+	Since  time.Time
+	Until  time.Time
+	// RecKey is the project key a server-made segment's records carry
+	// (ProjectKey is what the project goes by now).
+	RecKey string
 }
 
 // SegmentMinute is credited time in one minute of a segment.
@@ -62,6 +75,21 @@ type Segments interface {
 	// PutSegment stores a new segment, its bundle and its minutes, or
 	// replaces the status, numbers and minutes of a stored one (bundleGz nil).
 	PutSegment(ctx context.Context, sg *Segment, bundleGz []byte, minutes []SegmentMinute) error
+	// ReplaceSegment stores a segment the server made again, counted over
+	// its records as they are now: everything but its id, owner and
+	// creation time, with its bundle and its minutes. wasOpen is whether
+	// the caller read it as open: when it is not that any more (it was
+	// closed meanwhile), nothing is stored and the answer is ErrConflict.
+	ReplaceSegment(ctx context.Context, sg *Segment, wasOpen bool, bundleGz []byte, minutes []SegmentMinute) error
+	// StreamSegments are the segments the server made for a device, oldest
+	// first: all of them, or only those that are open or pending.
+	StreamSegments(ctx context.Context, deviceID string, unsettled bool) ([]Segment, error)
+	// UnsettledStreams are the devices with a server-made segment that is
+	// open or pending.
+	UnsettledStreams(ctx context.Context) ([]string, error)
+	// CloseStreamSegments closes a device's open segments at the last
+	// record the server holds of each: its records go on after a hole.
+	CloseStreamSegments(ctx context.Context, deviceID string) error
 	Segment(ctx context.Context, id string) (*Segment, error)
 	SegmentBundle(ctx context.Context, id string) ([]byte, error)
 	// ListSegments are a user's segments of one project (or all, 0), oldest first.
@@ -71,7 +99,8 @@ type Segments interface {
 	// CheckedUpTo is, for each of a user's projects, the end of the last
 	// segment that did not fail.
 	CheckedUpTo(ctx context.Context, userID int64) (map[int64]time.Time, error)
-	// PendingSegments are segments of any user waiting to be checked again.
+	// PendingSegments are segments devices uploaded, of any user, waiting to
+	// be checked again (one the server made is counted again at its cycle).
 	PendingSegments(ctx context.Context, limit int) ([]Segment, error)
 	// MarkSegmentsPending marks a project's segments pending: its prompts
 	// were asked for, and they are counted again once the checks are in.
@@ -107,10 +136,11 @@ func (s *DB) PutSegment(ctx context.Context, sg *Segment, gz []byte, minutes []S
 	sc, _ := json.Marshal(sg.Scored)
 	return s.tx(ctx, func(tx *txn) error {
 		if gz != nil {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO segments(id,user_id,project_id,device_id,status,problems,claimed,scored,seq_lo,seq_hi,score_ver,first_ts,last_ts,pending,created,checked)
-  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			if _, err := tx.ExecContext(ctx, `INSERT INTO segments(id,user_id,project_id,device_id,status,problems,claimed,scored,seq_lo,seq_hi,score_ver,first_ts,last_ts,pending,created,checked,stream,is_open,since_ts,until_ts,rec_key)
+  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 				sg.ID, sg.UserID, sg.ProjectID, sg.DeviceID, sg.Status, string(pr), string(cl), string(sc), sg.SeqLo, sg.SeqHi, sg.ScoreVer,
-				sg.FirstTS.UnixMilli(), sg.LastTS.UnixMilli(), sg.Pending, sg.Created.UnixMilli(), sg.Checked.UnixMilli()); err != nil {
+				sg.FirstTS.UnixMilli(), sg.LastTS.UnixMilli(), sg.Pending, sg.Created.UnixMilli(), sg.Checked.UnixMilli(),
+				b2i(sg.Stream), b2i(sg.Open), msOrZero(sg.Since), msOrZero(sg.Until), sg.RecKey); err != nil {
 				return err
 			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO segment_blobs(id,data) VALUES (?,?)`, sg.ID, gz); err != nil {
@@ -128,50 +158,126 @@ func (s *DB) PutSegment(ctx context.Context, sg *Segment, gz []byte, minutes []S
 				return err
 			}
 		}
-		if sg.Status == SegFailed {
-			return nil // a failed segment credits nothing
-		}
-		m, err := tx.PrepareContext(ctx, `INSERT INTO segment_minutes(segment_id,user_id,project_id,start_min,human,dark) VALUES (?,?,?,?,?,?)`)
-		if err != nil {
-			return err
-		}
-		defer m.Close()
-		for _, x := range minutes {
-			if x.Human <= 0 && x.Dark <= 0 {
-				continue
-			}
-			if _, err := m.ExecContext(ctx, sg.ID, sg.UserID, sg.ProjectID, x.StartMin, x.Human, x.Dark); err != nil {
-				return err
-			}
-		}
-		// the same minutes by model: one device's row, split as a merged minute is
-		mm, err := tx.PrepareContext(ctx, `INSERT INTO segment_models(segment_id,user_id,project_id,start_min,hand,model,seconds,prompts) VALUES (?,?,?,?,?,?,?,?)`)
-		if err != nil {
-			return err
-		}
-		defer mm.Close()
-		for _, x := range minutes {
-			row := brow{struggle: x.Human, agent: x.Human - x.Hand, prompts: x.Prompts, models: encodeModels(x.Models)}
-			for k, v := range mergeModels([]brow{row}) {
-				if _, err := mm.ExecContext(ctx, sg.ID, sg.UserID, sg.ProjectID, x.StartMin, b2i(k.hand), k.model, v.sec, v.prompts); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
+		return putMinutes(ctx, tx, sg, minutes)
 	})
 }
 
-const segCols = `s.id,s.user_id,s.project_id,p.key,s.device_id,s.status,s.problems,s.claimed,s.scored,s.seq_lo,s.seq_hi,s.score_ver,s.first_ts,s.last_ts,s.pending,s.created,s.checked`
+// putMinutes writes a segment's credited minutes (none were there).
+func putMinutes(ctx context.Context, tx *txn, sg *Segment, minutes []SegmentMinute) error {
+	if sg.Status == SegFailed {
+		return nil // a failed segment credits nothing
+	}
+	m, err := tx.PrepareContext(ctx, `INSERT INTO segment_minutes(segment_id,user_id,project_id,start_min,human,dark) VALUES (?,?,?,?,?,?)`)
+	if err != nil {
+		return err
+	}
+	defer m.Close()
+	for _, x := range minutes {
+		if x.Human <= 0 && x.Dark <= 0 {
+			continue
+		}
+		if _, err := m.ExecContext(ctx, sg.ID, sg.UserID, sg.ProjectID, x.StartMin, x.Human, x.Dark); err != nil {
+			return err
+		}
+	}
+	// the same minutes by model: one device's row, split as a merged minute is
+	mm, err := tx.PrepareContext(ctx, `INSERT INTO segment_models(segment_id,user_id,project_id,start_min,hand,model,seconds,prompts) VALUES (?,?,?,?,?,?,?,?)`)
+	if err != nil {
+		return err
+	}
+	defer mm.Close()
+	for _, x := range minutes {
+		row := brow{struggle: x.Human, agent: x.Human - x.Hand, prompts: x.Prompts, models: encodeModels(x.Models)}
+		for k, v := range mergeModels([]brow{row}) {
+			if _, err := mm.ExecContext(ctx, sg.ID, sg.UserID, sg.ProjectID, x.StartMin, b2i(k.hand), k.model, v.sec, v.prompts); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func msOrZero(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.UnixMilli()
+}
+
+func (s *DB) ReplaceSegment(ctx context.Context, sg *Segment, wasOpen bool, gz []byte, minutes []SegmentMinute) error {
+	pr, _ := json.Marshal(sg.Problems)
+	if sg.Problems == nil {
+		pr = []byte("[]")
+	}
+	sc, _ := json.Marshal(sg.Scored)
+	return s.tx(ctx, func(tx *txn) error {
+		res, err := tx.ExecContext(ctx, `UPDATE segments SET status=?, problems=?, scored=?, seq_lo=?, seq_hi=?, score_ver=?, first_ts=?, last_ts=?, pending=?, checked=?, is_open=?, since_ts=?, until_ts=? WHERE id=? AND is_open=?`,
+			sg.Status, string(pr), string(sc), sg.SeqLo, sg.SeqHi, sg.ScoreVer, sg.FirstTS.UnixMilli(), sg.LastTS.UnixMilli(), sg.Pending, sg.Checked.UnixMilli(),
+			b2i(sg.Open), msOrZero(sg.Since), msOrZero(sg.Until), sg.ID, b2i(wasOpen))
+		if err != nil {
+			return err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return err
+		} else if n == 0 {
+			return ErrConflict
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE segment_blobs SET data=? WHERE id=?`, gz, sg.ID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM segment_minutes WHERE segment_id=?`, sg.ID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM segment_models WHERE segment_id=?`, sg.ID); err != nil {
+			return err
+		}
+		return putMinutes(ctx, tx, sg, minutes)
+	})
+}
+
+func (s *DB) StreamSegments(ctx context.Context, deviceID string, unsettled bool) ([]Segment, error) {
+	q := `SELECT ` + segCols + segFrom + `WHERE s.device_id=? AND s.stream=1`
+	if unsettled {
+		q += ` AND (s.is_open=1 OR s.status='pending')`
+	}
+	return s.listSegs(ctx, q+` ORDER BY s.created, s.id`, deviceID)
+}
+
+func (s *DB) UnsettledStreams(ctx context.Context) ([]string, error) {
+	rows, err := s.rows(ctx, `SELECT DISTINCT device_id FROM segments WHERE stream=1 AND (is_open=1 OR status='pending') ORDER BY device_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var d string
+		if err := rows.Scan(&d); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+const segCols = `s.id,s.user_id,s.project_id,p.key,s.device_id,s.status,s.problems,s.claimed,s.scored,s.seq_lo,s.seq_hi,s.score_ver,s.first_ts,s.last_ts,s.pending,s.created,s.checked,s.stream,s.is_open,s.since_ts,s.until_ts,s.rec_key`
 const segFrom = ` FROM segments s JOIN projects p ON p.id=s.project_id `
 
 func scanSeg(r scanner) (*Segment, error) {
 	var sg Segment
 	var pr, cl, sc string
-	var ft, lt, cr, ck int64
+	var ft, lt, cr, ck, since, until int64
+	var stream, open int
 	if err := r.Scan(&sg.ID, &sg.UserID, &sg.ProjectID, &sg.ProjectKey, &sg.DeviceID, &sg.Status, &pr, &cl, &sc, &sg.SeqLo, &sg.SeqHi, &sg.ScoreVer,
-		&ft, &lt, &sg.Pending, &cr, &ck); err != nil {
+		&ft, &lt, &sg.Pending, &cr, &ck, &stream, &open, &since, &until, &sg.RecKey); err != nil {
 		return nil, nf(err)
+	}
+	sg.Stream, sg.Open = stream != 0, open != 0
+	if since != 0 {
+		sg.Since = time.UnixMilli(since).UTC()
+	}
+	if until != 0 {
+		sg.Until = time.UnixMilli(until).UTC()
 	}
 	json.Unmarshal([]byte(pr), &sg.Problems)
 	json.Unmarshal([]byte(cl), &sg.Claimed)
@@ -237,7 +343,7 @@ func (s *DB) CheckedUpTo(ctx context.Context, uid int64) (map[int64]time.Time, e
 }
 
 func (s *DB) PendingSegments(ctx context.Context, limit int) ([]Segment, error) {
-	return s.listSegs(ctx, `SELECT `+segCols+segFrom+`WHERE s.status='pending' ORDER BY s.checked LIMIT ?`, limit)
+	return s.listSegs(ctx, `SELECT `+segCols+segFrom+`WHERE s.status='pending' AND s.stream=0 ORDER BY s.checked LIMIT ?`, limit)
 }
 
 func (s *DB) MarkSegmentsPending(ctx context.Context, uid, pid int64) error {
@@ -361,4 +467,14 @@ WHERE c.status<>'' AND k.project_id=? GROUP BY c.status`, projectID)
 		out[strings.TrimSpace(st)] = n
 	}
 	return out, rows.Err()
+}
+
+// A segment's until_ts is then just past the last record of its project
+// that the server holds, which may be later than the last one counted:
+// the next cycle counts the segment once more, with those records.
+func (s *DB) CloseStreamSegments(ctx context.Context, deviceID string) error {
+	_, err := s.exec(ctx, `UPDATE segments SET is_open=0, until_ts=1+COALESCE(
+  (SELECT MAX(r.ts) FROM records r WHERE r.device_id=segments.device_id AND r.project=segments.rec_key AND r.data<>'' AND r.seq>=segments.seq_lo), segments.last_ts)
+WHERE device_id=? AND stream=1 AND is_open=1`, deviceID)
+	return err
 }

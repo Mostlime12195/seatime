@@ -17,13 +17,15 @@ import (
 	"seatime/pkg/ledger"
 )
 
-// Continuous verification. A device uploads each project's records once a
-// stretch of work is over (a segment: the records in their private form,
-// as pkg/api Bundle). The server checks it against the checkpoints the
-// device synced in real time and counts it with the one-page rule, as
-// soon as it arrives; a segment whose prompts wait for their check is
-// counted again when the checks come back. Records that do not match the
-// chain do not count, and the project shows the reason (apps.go).
+// Continuous verification. A segment is one stretch of one project's
+// records in their private form (pkg/api Bundle). The server cuts it from
+// the records a device sends as it writes them (records.go); a device
+// older than that uploads it itself once the stretch is over. Either way
+// the server checks it against the checkpoints the device synced in real
+// time and counts it with the one-page rule. An uploaded segment whose
+// prompts wait for their check is counted again when the checks come
+// back. Records that do not match the chain do not count, and the project
+// shows the reason (apps.go).
 
 // Segment body limits: a segment is one stretch of work; a month of heavy
 // use is a few MB.
@@ -144,7 +146,9 @@ func (s *Server) checkSegment(ctx context.Context, dev *store.Device, b *api.Bun
 	switch {
 	case len(sg.Problems) > 0:
 		sg.Status = store.SegFailed
-	case a.Pending > 0 || s.pullsOpen(ctx, sg.UserID, b.Project):
+	case a.Pending > 0 && !sg.Open || s.pullsOpen(ctx, sg.UserID, b.Project):
+		// a stretch that is not over is counted again at every cycle
+		// anyway: a prompt of it still being checked adds its time then
 		sg.Status = store.SegPending
 	default:
 		sg.Status = store.SegVerified
@@ -325,8 +329,8 @@ func (s *Server) recheckUser(ctx context.Context, userID int64) {
 		return
 	}
 	for i := range segs {
-		if segs[i].Status != store.SegPending {
-			continue
+		if segs[i].Status != store.SegPending || segs[i].Stream {
+			continue // one the server made is counted again at its cycle (records.go)
 		}
 		if err := s.recheckSegment(ctx, &segs[i]); err != nil {
 			s.log.Error("recheck segment", "id", segs[i].ID, "err", err)

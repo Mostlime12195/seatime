@@ -389,14 +389,19 @@ func (s *Server) everOn() bool {
 // promptChecks is the switch's history and the stored verdicts for a
 // bundle's prompts, for the count (nil when the check was never on).
 func (s *Server) promptChecks(ctx context.Context, deviceID string, b *api.Bundle) (*promptcheck.Set, error) {
-	if !s.everOn() {
-		return nil, nil
-	}
 	var hashes []string
 	for _, en := range b.Entries {
 		if e := en.Event; e != nil && e.Kind == event.Prompt && e.CheckHash != "" {
 			hashes = append(hashes, e.CheckHash)
 		}
+	}
+	return s.promptChecksOf(ctx, deviceID, hashes)
+}
+
+// promptChecksOf is promptChecks for prompts by their hashes.
+func (s *Server) promptChecksOf(ctx context.Context, deviceID string, hashes []string) (*promptcheck.Set, error) {
+	if !s.everOn() {
+		return nil, nil
 	}
 	periods := s.rulePeriods()
 	if dev, err := s.store.DeviceByID(ctx, deviceID); err == nil {

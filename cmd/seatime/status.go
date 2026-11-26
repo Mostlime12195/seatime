@@ -179,7 +179,7 @@ func writeToday(w io.Writer, s styler, sm stats.Summary) {
 	case sm.CheckOn:
 		// the server counts AI time, when the records of a stretch of work
 		// reach it: this computer knows hand time only
-		fmt.Fprintf(w, "  %s\n", s.dim("this is your hand time. Time with AI tools is counted by the server and shows on the site about 3 hours after you stop."))
+		fmt.Fprintf(w, "  %s\n", s.dim("this is your hand time. Time with AI tools is counted by the server and shows on the site within about an hour."))
 	case sm.AINotCounted > 0:
 		fmt.Fprintf(w, "  %s\n", s.dim(fmt.Sprintf("agent time not counted today: %s (more than %g min after your last edit or new prompt)", stats.Dur(sm.AINotCounted), ledger.Window.Minutes())))
 	}

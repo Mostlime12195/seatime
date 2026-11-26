@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"seatime/internal/adapters/claudecode"
 	"seatime/internal/client/store"
 	"seatime/pkg/event"
 )
@@ -153,16 +154,22 @@ func ClaudeBackfill(path string, from, to time.Time) []event.Event {
 	}
 	for sc.Scan() {
 		var l struct {
-			Type      string          `json:"type"`
-			Timestamp string          `json:"timestamp"`
-			SessionID string          `json:"sessionId"`
-			CWD       string          `json:"cwd"`
-			Sidechain bool            `json:"isSidechain"`
-			Meta      bool            `json:"isMeta"`
-			Message   json.RawMessage `json:"message"`
+			Type      string `json:"type"`
+			Timestamp string `json:"timestamp"`
+			SessionID string `json:"sessionId"`
+			CWD       string `json:"cwd"`
+			Sidechain bool   `json:"isSidechain"`
+			Meta      bool   `json:"isMeta"`
+			Origin    *struct {
+				Kind string `json:"kind"`
+			} `json:"origin"`
+			Message json.RawMessage `json:"message"`
 		}
 		if json.Unmarshal(sc.Bytes(), &l) != nil || l.Sidechain || l.Meta {
 			continue
+		}
+		if l.Type == "user" && l.Origin != nil && l.Origin.Kind != "" && l.Origin.Kind != claudecode.Human {
+			continue // a message the tool sent itself (claudecode.SentBy)
 		}
 		ts, err := time.Parse(time.RFC3339Nano, l.Timestamp)
 		if err != nil || !ts.After(from) || ts.After(to) {

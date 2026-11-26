@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -79,6 +80,11 @@ type Config struct {
 	// comes before the file.
 	PromptCheckFile  string
 	PromptCheckRules string
+
+	// CountEvery is how often the server counts the records devices send
+	// (SEATIME_COUNT_EVERY, a duration such as 1h or 15m; default 1h): at
+	// every multiple of it on the clock, so 1h is each hour on the hour.
+	CountEvery time.Duration
 }
 
 func env(k, def string) string {
@@ -132,6 +138,7 @@ func ConfigFromEnv() Config {
 		GHSecret:    os.Getenv("SEATIME_GITHUB_CLIENT_SECRET"),
 		Admins:      idSet(os.Getenv("SEATIME_ADMIN_IDS")),
 	}
+	c.CountEvery, _ = time.ParseDuration(os.Getenv("SEATIME_COUNT_EVERY"))
 	c.HackatimeTrust = os.Getenv("SEATIME_HACKATIME_TRUST") == "1"
 	c.HackatimeURL = strings.TrimRight(env("SEATIME_HACKATIME_URL", "https://hackatime.hackclub.com"), "/")
 	for _, k := range strings.Split(os.Getenv("SEATIME_REVIEW_KEYS"), ",") {
