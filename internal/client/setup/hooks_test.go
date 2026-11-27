@@ -8,6 +8,7 @@ import (
 
 	"seatime/internal/adapters"
 	"seatime/internal/client/config"
+	"seatime/internal/client/tray"
 )
 
 // fakeAdapter is a harness whose presence/hook state the test controls.
@@ -276,6 +277,9 @@ func TestMacInstallUninstallLeavesNoTrace(t *testing.T) {
 	}
 	if _, err := os.Stat(launchdPath()); err != nil {
 		t.Fatal("agent plist not written")
+	}
+	if tray.Supported && !exists(trayPlistPath()) {
+		t.Fatal("the menu bar icon's plist not written")
 	}
 	if err := Uninstall(Options{Runner: m, Probe: m.probe, goos: "darwin"}, false); err != nil {
 		t.Fatal(err)

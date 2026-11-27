@@ -69,6 +69,10 @@ The background service checks in with the server, with or without new work. Its 
 - `health.settings.auto_update`: whether automatic updates are on
 - `health.settings.editor_plugin`: whether a WakaTime or Hackatime editor plugin reports to SeaTime
 
+## While the menu bar icon runs (today)
+
+The icon asks the server for your time today and for what is not checked yet, so that its menu shows the same numbers as the website. The request carries this computer's token and nothing else.
+
 ## When this computer finishes a request from the Settings page (result)
 
 - `result.device_id`: random id of this installation

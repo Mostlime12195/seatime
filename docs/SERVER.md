@@ -201,9 +201,16 @@ Publishing a release: do it on a machine that is not the server. The signing key
    in `internal/client/update/key.go` and commit it. Until then, clients refuse to update themselves. Clients accept a manifest
    signed by any key in `PublicKeys`. To rotate keys, add the new key there, and ship a release signed with the old one. Then
    sign with the new one, and drop the old one. `seatime-release sign -expires 720h` adds an expiry date.
-2. `git tag vX.Y.Z && SEATIME_SIGNING_KEY=<path> VERSION=vX.Y.Z scripts/release.sh` builds the six targets into `dist/`. It
-   writes `SHA256SUMS` and the signed `RELEASE` manifest. It refuses to run if the key does not match `key.go`.
-3. Copy `dist/*` into `SEATIME_DL_DIR` (`RELEASE` last), or upload it as release assets where `SEATIME_DL_UPSTREAM` points.
+2. Build the two macOS binaries on a Mac. The macOS menu bar icon uses Cocoa, so these two need cgo; the other four build
+   anywhere. The `release-build` workflow does it on a GitHub macOS runner: `gh workflow run release-build.yml -f version=vX.Y.Z`,
+   then `gh run download <run id> -D <dir>`. The workflow publishes nothing and never sees the signing key.
+3. `git tag vX.Y.Z && SEATIME_SIGNING_KEY=<path> VERSION=vX.Y.Z SEATIME_DARWIN_DIR=<dir>/seatime-vX.Y.Z-unsigned scripts/release.sh`
+   builds the other four targets into `dist/` and copies the two macOS binaries in, after checking them against the workflow's
+   `SHA256SUMS` and `VERSION`. The workflow builds the other four too, and the script stops if they are not the same bytes
+   as its own: the Mac then built from other source. It writes `SHA256SUMS` and the signed `RELEASE` manifest, and it refuses
+   to run if the key does not match `key.go`. On a Mac, the script builds all six itself and needs no `SEATIME_DARWIN_DIR`.
+   `RELEASE` may list only the six `seatime-<os>-<arch>` files: installed clients refuse a manifest with any other name in it.
+4. Copy `dist/*` into `SEATIME_DL_DIR` (`RELEASE` last), or upload it as release assets where `SEATIME_DL_UPSTREAM` points.
 
 Installed clients check `RELEASE` once a day. They verify its ed25519 signature and the SHA-256 of each file, then swap in the
 new binary. If `seatime doctor --self-test` fails, they roll back. The installers themselves check only `SHA256SUMS`, so a
@@ -218,7 +225,8 @@ this). It adds a PATH line to your shell rc file (skip with `SEATIME_NO_MODIFY_P
 
 API (see `pkg/api`): `POST /api/v1/device/start|poll`, `POST /api/v1/sync`,
 `POST /api/v1/device/check-in` (a device's health; answers with the account's settings and requests from the web),
-`POST /api/v1/device/requests/{id}` (a device's answer to one request), `POST /api/v1/records` (a device's records,
+`POST /api/v1/device/requests/{id}` (a device's answer to one request), `GET /api/v1/device/today` (the account's time
+today and what is not checked yet, for a computer's menu bar icon), `POST /api/v1/records` (a device's records,
 as it writes them), `POST /api/v1/segments` (a stretch of records, from a device older than v0.1.14),
 `GET /api/v1/users/{u}/projects/{p}/stats?since=&until=` and `.../ysws[.txt]` (a project's checked hours, status and
 export; with the user's own token, `stats` also has the checked time and prompts by AI model, see `YSWS.md`), the read API in Hackatime's format (see `YSWS.md`), OAuth (`GET|POST /oauth/authorize`, `POST /oauth/token`,

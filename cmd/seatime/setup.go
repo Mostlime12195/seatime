@@ -45,13 +45,14 @@ func cmdSetup(args []string, uninstall bool) error {
 	noWaka := fs.Bool("no-wakatime", false, "never touch ~/.wakatime.cfg, even with --yes")
 	also := fs.Bool("also-hackatime", true, "forward editor heartbeats unchanged to your previous WakaTime/Hackatime api_url (default; --also-hackatime=false stops it, saved)")
 	noSvc := fs.Bool("no-service", false, "don't install the background service")
+	noTray := fs.Bool("no-tray", false, "no menu bar icon (saved; `seatime tray on` brings it back)")
 	noCopy := fs.Bool("no-copy", false, "don't copy the binary into the data dir")
 	noLogin := fs.Bool("no-login", false, "with --yes: skip the device login")
 	noBrowser := fs.Bool("no-browser", false, "with --yes: don't open a browser for login")
 	verbose := fs.Bool("verbose", false, "echo the system commands setup runs")
 	purge := fs.Bool("purge", false, "uninstall: also delete all local data")
 	fs.Parse(args)
-	o := setup.Options{DryRun: *dry, WakaProxy: *waka, NoService: *noSvc, NoCopy: *noCopy,
+	o := setup.Options{DryRun: *dry, WakaProxy: *waka, NoService: *noSvc, NoTray: *noTray, NoCopy: *noCopy,
 		Out: os.Stdout, Yes: *yes, NoWaka: *noWaka, Verbose: *verbose, Harness: splitList(*harness),
 		Server: *server, Version: version, Probe: probeDaemon}
 	fs.Visit(func(f *flag.Flag) {

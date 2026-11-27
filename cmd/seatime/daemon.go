@@ -44,7 +44,7 @@ func cmdDaemon(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	d := &daemon.Daemon{Version: version, Store: st, Pipeline: p, Adapters: adapters.All(), Service: *service,
-		Update: newUpdater(exe, true), OpenBrowser: openBrowser}
+		Update: newUpdater(exe, true), OpenBrowser: openBrowser, TrayExe: exe}
 	logx.Printf("daemon starting (version %s, pid %d)", version, os.Getpid())
 	err = d.Run(ctx)
 	st.Close()

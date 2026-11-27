@@ -174,6 +174,7 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /api/v1/prompt-hashes", s.handlePromptHashes)
 	m.HandleFunc("POST /api/v1/device/check-in", s.handleCheckIn)
 	m.HandleFunc("POST /api/v1/device/requests/{id}", s.handleRequestResult)
+	m.HandleFunc("GET /api/v1/device/today", s.handleDeviceToday)
 	m.HandleFunc("GET /api/v1/users/{user}/projects/{project}/stats", s.handleStats)
 	m.HandleFunc("GET /api/v1/review/users", s.handleReviewUsers)
 	m.HandleFunc("GET /api/v1/review/users/{user}", s.handleReviewUser)

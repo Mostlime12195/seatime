@@ -70,6 +70,7 @@ func UninstallSelf(o Options, purge bool, beforeStop func()) error {
 		o.say("wakatime: FAILED: %v", err)
 	}
 	removeOldExtension()
+	RemoveTray(o)
 	_ = localauth.Remove()
 	cfg.HookOptOut, cfg.Hooked, cfg.WakaAuto = nil, nil, false
 	svcCfg := cfg

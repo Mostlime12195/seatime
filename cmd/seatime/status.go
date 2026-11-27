@@ -344,6 +344,8 @@ func cmdDoctor(args []string) error {
 	}
 	ul, ud := updateCheck()
 	add(ul, "updates", ud)
+	tl, td := trayCheck(cfg)
+	add(tl, "menu bar icon", td)
 	add("ok", "platform", runtime.GOOS+"/"+runtime.GOARCH)
 	s := newStyler()
 	bad := 0

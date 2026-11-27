@@ -78,9 +78,16 @@ type Daemon struct {
 	// page, at most once a day (signin.go). nil: no automatic sign-in.
 	OpenBrowser func(url string) bool
 
+	// TrayExe is the binary the menu bar icon runs from ("" = the daemon
+	// leaves the icon alone).
+	TrayExe string
+
 	restart chan struct{}
 	hookMu  sync.Mutex
 	hookRes []setup.HookResult
+	// syncMu lets one sync run at a time: the loop's or "Send now"'s.
+	syncMu     sync.Mutex
+	trayTotals trayTotals
 }
 
 // ErrRestart is what Run returns when the daemon should start again on the
@@ -130,6 +137,9 @@ func (d *Daemon) handler(cfg config.Config) http.Handler {
 	})
 	mux.HandleFunc("/seatime/emit", d.handleEmit)
 	mux.HandleFunc("/seatime/restart", d.handleRestart)
+	mux.HandleFunc("/seatime/tray", d.handleTray)
+	mux.HandleFunc("/seatime/tray/send", d.handleTraySend)
+	mux.HandleFunc("/seatime/tray/update", d.handleTrayUpdate)
 	waka := wakaproxy.New(d.Pipeline, cfg.ForwardURL)
 	waka.ForwardFn = newForwardWatcher(cfg.ForwardURL).get
 	mux.Handle("/", waka)
@@ -206,6 +216,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	go d.segmentLoop(ctx)
 	go d.checkLoop(ctx)
 	go d.updateLoop(ctx)
+	go d.trayLoop(ctx)
 	go func() { // hand freed memory back to the OS
 		t := time.NewTicker(5 * time.Minute)
 		defer t.Stop()
@@ -451,7 +462,9 @@ func (d *Daemon) syncLoop(ctx context.Context) {
 	fails := 0
 	sleep(ctx, 10*time.Second)
 	for ctx.Err() == nil {
+		d.syncMu.Lock()
 		_, err := s.SyncOnce(ctx)
+		d.syncMu.Unlock()
 		if rejected, revoked := authRejected(err); rejected && d.OpenBrowser != nil {
 			// sign in again by itself instead of asking for `seatime login`
 			wait, done := d.signInStep(ctx, revoked, time.Now())
@@ -471,7 +484,10 @@ func (d *Daemon) syncLoop(ctx context.Context) {
 		_ = d.Store.SetMeta(MetaSyncBlocked, blockedMessage(err))
 		if err == nil {
 			// the records behind the checkpoint that sync carried
-			if _, rerr := d.RecordsOnce(ctx); rerr != nil && !errors.Is(rerr, syncer.ErrNotLoggedIn) && !errors.Is(rerr, records.ErrUnsupported) {
+			d.syncMu.Lock()
+			_, rerr := d.RecordsOnce(ctx)
+			d.syncMu.Unlock()
+			if rerr != nil && !errors.Is(rerr, syncer.ErrNotLoggedIn) && !errors.Is(rerr, records.ErrUnsupported) {
 				logx.Printf("records: %v", rerr)
 			}
 		}

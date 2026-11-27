@@ -3,6 +3,8 @@ module seatime
 go 1.27.4
 
 require (
+	fyne.io/systray v1.12.2
+	github.com/godbus/dbus/v5 v5.1.0
 	github.com/jackc/pgx/v5 v5.13.0
 	modernc.org/sqlite v1.62.0
 )

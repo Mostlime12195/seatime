@@ -13,6 +13,7 @@ import (
 type Counting struct {
 	Yes     bool
 	Project string // when Yes
+	Key     string // when Yes: the project's key in the local log
 	Reason  string // one plain clause: why not, or what is being counted
 	// Note is a line shown under it, such as an AI tool SeaTime cannot hear.
 	Note string
@@ -89,10 +90,10 @@ func CountingNow(in CountingInput) Counting {
 	c := Counting{Note: notHeard(in.Now, evs, in.CheckOn)}
 	switch {
 	case agent != nil && yours != nil && agent.Project == yours.Project && in.Now.Sub(yours.Time) <= ledger.Window && in.Now.Sub(agent.Time) <= ledger.Timeout:
-		c.Yes, c.Project = true, name(yours.Project)
+		c.Yes, c.Project, c.Key = true, name(yours.Project), yours.Project
 		c.Reason = "the agent's time counts until " + yours.Time.Add(ledger.Window).In(in.Now.Location()).Format("15:04") + " unless you say something new"
 	case yours != nil && in.Now.Sub(yours.Time) <= ledger.Timeout:
-		c.Yes, c.Project, c.Reason = true, name(yours.Project), "your last heartbeat was under 2 minutes ago"
+		c.Yes, c.Project, c.Key, c.Reason = true, name(yours.Project), yours.Project, "your last heartbeat was under 2 minutes ago"
 	case len(in.Silent) > 0:
 		c.Reason = strings.Join(in.Silent, " and ") + " is running but SeaTime is not hearing from it (run `seatime doctor`)"
 	case !in.Hooked:

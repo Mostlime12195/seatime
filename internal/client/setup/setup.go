@@ -20,6 +20,7 @@ type Options struct {
 	DryRun    bool
 	WakaProxy bool // explicit consent to rewrite ~/.wakatime.cfg
 	NoService bool
+	NoTray    bool // no menu bar icon, now or later (saved)
 	NoCopy    bool
 	Out       io.Writer
 
@@ -39,6 +40,7 @@ type Options struct {
 	noWait bool                      // tests: don't sleep while waiting for the daemon
 	goos   string                    // tests: override runtime.GOOS for the service plan
 	getenv func(string) string       // tests: override os.Getenv for headless detection
+	trayUp func() bool               // tests: is the menu bar icon running?
 }
 
 func (o Options) say(f string, a ...any) {
@@ -135,6 +137,7 @@ type Report struct {
 	Hooks   []HookResult
 	Service ServiceResult
 	Waka    string // one-line note, "" if untouched
+	Icon    bool   // the menu bar icon was started
 	Hints   []string
 	Server  string
 }
@@ -247,8 +250,17 @@ func Setup(o Options) (*Report, error) {
 			rep.Hints = append(rep.Hints, "wakatime: the daemon isn't running, so ~/.wakatime.cfg was left untouched; once `seatime daemon` is up, run `seatime setup --yes`")
 			o.say("wakatime: daemon not running; restored ~/.wakatime.cfg")
 		}
+		if o.NoTray {
+			off := false
+			cfg.Tray = &off
+		}
 		if !o.DryRun {
 			_ = config.Save(cfg)
+		}
+		if err == nil && res.Running && cfg.TrayEnabled() {
+			if rep.Icon, err = EnsureTray(o, bin, true); err != nil {
+				o.say("tray: FAILED: %v", err)
+			}
 		}
 	}
 	if !o.DryRun {
@@ -291,6 +303,13 @@ func (r *Report) Summary(w io.Writer, loginLine string) {
 	}
 	if r.Waka != "" {
 		fmt.Fprintln(w, "  editors:   WakaTime/Hackatime plugin detected and wired to seatime")
+	}
+	if r.Icon {
+		place := "system tray"
+		if runtime.GOOS == "darwin" {
+			place = "menu bar"
+		}
+		fmt.Fprintf(w, "  icon:      SeaTime is in your %s\n", place)
 	}
 	if loginLine != "" {
 		fmt.Fprintf(w, "  account:   %s\n", loginLine)
@@ -359,6 +378,7 @@ func Uninstall(o Options, purge bool) error {
 	if err := DisableWakaProxy(o, &cfg); err != nil {
 		o.say("wakatime: FAILED: %v", err)
 	}
+	RemoveTray(o)
 	_ = UninstallService(o, &cfg)
 	if !o.DryRun {
 		removeOldExtension()

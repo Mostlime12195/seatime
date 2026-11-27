@@ -1,0 +1,76 @@
+# Builds the six release binaries on a Mac and keeps them as an artifact.
+# The macOS menu bar icon is Cocoa, so the two macOS binaries need cgo and
+# a Mac; nothing else does. This workflow publishes nothing and signs
+# nothing, and it never sees the release key: the machine that holds the
+# key downloads the artifact and runs scripts/release.sh with
+# SEATIME_DARWIN_DIR pointing at it (docs/SERVER.md, "One-line install").
+#
+# Manual only: Actions tab > release-build > Run workflow, or
+#   gh workflow run release-build.yml -f version=vX.Y.Z
+name: release-build
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, vX.Y.Z (the same one that is signed afterwards)
+        required: true
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 25
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: the version is a release version
+        run: |
+          echo "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo "not vX.Y.Z: $VERSION"; exit 1; }
+      - name: unit tests (the icon, with cgo)
+        run: go test ./internal/client/tray/...
+      - name: unit tests (the rest of the client)
+        # shown, but a failure here does not hold the build back
+        continue-on-error: true
+        run: go test ./cmd/seatime/... ./internal/client/... ./internal/adapters/... ./pkg/...
+      - name: build the six targets
+        run: sh scripts/release.sh
+      - name: check the macOS binaries
+        run: |
+          for a in arm64 amd64; do
+            f=dist/seatime-darwin-$a
+            file "$f"
+            # they must run on every macOS that the Go version supports (13 and later), not only on this runner's
+            otool -l "$f" | grep -A4 LC_BUILD_VERSION | grep -q 'minos 13\.0' || { otool -l "$f" | grep -A6 LC_BUILD_VERSION; echo "$f: wrong minimum macOS"; exit 1; }
+          done
+          dist/seatime-darwin-arm64 version
+          # what an installed client runs before it keeps an update
+          dist/seatime-darwin-arm64 doctor --self-test | tee selftest.txt
+          grep -qx "self-test ok $VERSION" selftest.txt
+          # the icon and its menu come up in this runner's desktop session
+          dist/seatime-darwin-arm64 tray --check | tee tray.txt
+          grep -qx "tray ok" tray.txt
+          # the Intel binary, where the runner has Rosetta
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            dist/seatime-darwin-amd64 doctor --self-test
+            dist/seatime-darwin-amd64 tray --check
+          fi
+      - name: how long one hook call takes to start, against the last release
+        # shown only: every hook starts this binary, and it now loads Cocoa
+        continue-on-error: true
+        run: |
+          curl -fsSL -o old https://github.com/${{ github.repository }}/releases/latest/download/seatime-darwin-arm64 && chmod +x old
+          for b in ./old dist/seatime-darwin-arm64; do
+            "$b" version
+            time (for i in $(seq 50); do "$b" version >/dev/null; done)
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: seatime-${{ inputs.version }}-unsigned
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14

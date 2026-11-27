@@ -1,6 +1,6 @@
 #!/bin/sh
-# macOS smoke test: build, install into a throwaway home, check the launchd
-# agent loads, record one fake hook event, read it back, uninstall, and check
+# macOS smoke test: build, show the menu bar icon for a moment, install into
+# a throwaway home, check the launchd agent loads, record one fake hook event, read it back, uninstall, and check
 # nothing is left. Used by .github/workflows/macos.yml (manual dispatch) and
 # runnable on any Mac:  sh scripts/mac-smoke.sh
 # With no Go on the Mac, point it at a built binary instead:
@@ -28,6 +28,11 @@ else
   fail "no Go here: install it (brew install go) or set SEATIME_BIN to a built seatime binary"
 fi
 "$T/seatime" version 2>/dev/null || true
+
+step "menu bar icon"
+# the icon and its menu come up for a moment (needs a build with cgo, on a Mac's own desktop session)
+"$T/seatime" tray --check | tee "$T/tray.txt"
+grep -qx 'tray ok' "$T/tray.txt" || fail "this build cannot show the menu bar icon"
 export SEATIME_FAKE_HOME="$T/home" SEATIME_HOME="$T/home/Library/Application Support/seatime" SEATIME_SERVER="http://127.0.0.1:9"
 mkdir -p "$SEATIME_FAKE_HOME/.claude"
 # a pre-existing user setting that must survive byte for byte

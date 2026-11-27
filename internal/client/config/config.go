@@ -122,6 +122,10 @@ type Config struct {
 	// UpdateURL is where releases are downloaded from ("" = <server>/dl/).
 	// Releases are trusted by their signature, not by this host.
 	UpdateURL string `json:"update_url,omitempty"`
+	// Tray: nil/true = the menu bar icon runs (on macOS a menu bar item, on
+	// Windows a notification area icon, on Linux a status item); false =
+	// it does not (`seatime tray off`).
+	Tray *bool `json:"tray,omitempty"`
 	// FrontWindowCheck: true = at each prompt, and every 5 s while you
 	// work, SeaTime asks the system whether the AI tool's own window (or
 	// terminal) is in front and records only yes, no or "no window
@@ -144,6 +148,9 @@ func (c Config) AutoHookEnabled() bool { return c.AutoHook == nil || *c.AutoHook
 
 // AutoUpdateEnabled reports whether the daemon updates SeaTime by itself.
 func (c Config) AutoUpdateEnabled() bool { return c.AutoUpdate == nil || *c.AutoUpdate }
+
+// TrayEnabled reports whether the menu bar icon runs.
+func (c Config) TrayEnabled() bool { return c.Tray == nil || *c.Tray }
 
 // UpdateBase is the release download folder, ending in "/".
 func (c Config) UpdateBase() string {

@@ -109,6 +109,34 @@ func (s *Server) handleCheckIn(w http.ResponseWriter, r *http.Request) {
 	jsonOut(w, 200, resp)
 }
 
+// handleDeviceToday answers a device's menu bar icon: the account's time
+// counted today and what is not checked yet, as its own pages show them.
+func (s *Server) handleDeviceToday(w http.ResponseWriter, r *http.Request) {
+	_, user, ok := s.authDevice(w, r)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	now := s.now()
+	off := user.TZOffsetMin
+	today := now.Add(time.Duration(off)*time.Minute).Unix() / 86400
+	days, err := s.dayMap(ctx, user.ID, 0, today, today, off)
+	if err != nil {
+		s.log.Error("device today", "err", err)
+		jsonErr(w, 500, "internal error")
+		return
+	}
+	all, err := s.store.ProjectSums(ctx, user.ID, time.Unix(0, 0), now)
+	if err != nil {
+		s.log.Error("device today", "err", err)
+		jsonErr(w, 500, "internal error")
+		return
+	}
+	resp := api.Today{Seconds: days[today].Struggle}
+	resp.UncheckedSeconds, resp.UncheckedPrompts = s.unchecked(ctx, user.ID, all, now)
+	jsonOut(w, 200, resp)
+}
+
 // resultErrors are the error codes a device may answer with.
 var resultErrors = []string{"unknown_project", "failed", "unsupported"}
 

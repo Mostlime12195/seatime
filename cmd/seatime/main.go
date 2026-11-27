@@ -7,6 +7,7 @@ import (
 	"runtime"
 
 	"seatime/internal/client/config"
+	"seatime/internal/client/tray"
 	"seatime/internal/client/update"
 )
 
@@ -24,6 +25,7 @@ usage: seatime <command> [flags]
   projects    projects SeaTime has seen
   name        the name a project shows under on the server: seatime name <project> <name>
   dash        local web dashboard on 127.0.0.1
+  tray        the menu bar icon; SeaTime starts it by itself (off / on: remove it or bring it back)
   forget      delete prompt text kept on this machine (--project X, --from-now-on)
   statusline  one line for a harness status bar: today's time on this project
   send        sync and send your records to the server now, without waiting for the next round
@@ -44,6 +46,9 @@ func main() {
 		os.Exit(0)
 	}
 	cmd, args := os.Args[1], os.Args[2:]
+	if cmd != "tray" {
+		tray.ReleaseMainThread() // only the icon needs it
+	}
 	if cmd == "hook" { // never fails
 		runHook(args)
 		os.Exit(0)
@@ -85,6 +90,8 @@ func main() {
 		err = cmdStatusline(args)
 	case "dash":
 		err = cmdDash(args)
+	case "tray":
+		err = cmdTray(args)
 	case "send":
 		err = cmdSend(args)
 	case "doctor":

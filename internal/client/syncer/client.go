@@ -56,6 +56,10 @@ func (e *HTTPError) Error() string {
 }
 
 func (c *Client) do(ctx context.Context, path string, in, out any) (int, error) {
+	return c.call(ctx, "POST", path, in, out)
+}
+
+func (c *Client) call(ctx context.Context, method, path string, in, out any) (int, error) {
 	var body io.Reader
 	if in != nil {
 		b, err := json.Marshal(in)
@@ -64,7 +68,7 @@ func (c *Client) do(ctx context.Context, path string, in, out any) (int, error) 
 		}
 		body = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, "POST", c.BaseURL+path, body)
+	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, body)
 	if err != nil {
 		return 0, err
 	}
@@ -190,6 +194,14 @@ func (c *Client) Segment(ctx context.Context, b api.Bundle) (api.SegmentResp, er
 func (c *Client) CheckIn(ctx context.Context, req api.CheckIn) (api.CheckInResp, error) {
 	var r api.CheckInResp
 	_, err := c.do(ctx, "/api/v1/device/check-in", req, &r)
+	return r, err
+}
+
+// Today reads the account's counted time today and what the server has
+// not checked yet (for the menu bar icon).
+func (c *Client) Today(ctx context.Context) (api.Today, error) {
+	var r api.Today
+	_, err := c.call(ctx, "GET", "/api/v1/device/today", nil, &r)
 	return r, err
 }
 

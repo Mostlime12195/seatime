@@ -16,6 +16,11 @@ SeaTime is AGPL-3.0 (LICENSE). Everything below is compatible with it.
 - modernc.org/memory v1.12.1: BSD-3-Clause
 - modernc.org/sqlite v1.62.0: BSD-3-Clause; SQLite itself is public domain
 
+## Linked into seatime only
+
+- fyne.io/systray v1.12.2 (the menu bar icon): Apache-2.0
+- github.com/godbus/dbus/v5 v5.1.0 (the icon on Linux): BSD-2-Clause
+
 ## Linked into seatimed only
 
 - github.com/jackc/pgx/v5 v5.13.0: MIT

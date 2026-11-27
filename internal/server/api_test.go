@@ -278,6 +278,14 @@ func TestSyncIdempotentAndStats(t *testing.T) {
 			t.Errorf("%s does not label the unchecked time and prompts: %q", path, m)
 		}
 	}
+	// a device's menu bar icon reads the same numbers
+	sameDay := m.YearDay() == time.Now().UTC().YearDay() // m is five minutes ago
+	if c, td := apiJSON[api.Today](t, e, "/api/v1/device/today", d.token); c != 200 || (td.Seconds != 80 && sameDay) || td.UncheckedSeconds != 80 || td.UncheckedPrompts != 2 {
+		t.Errorf("device today: %d %+v", c, td)
+	}
+	if c, _ := apiJSON[api.Today](t, e, "/api/v1/device/today", ""); c != 401 {
+		t.Errorf("device today without a token: %d", c)
+	}
 	// live fragment endpoint
 	if c, body := br.get("/@bob?frag=1"); c != 200 || strings.Contains(body, "<html") || !strings.Contains(body, "<span>today</span>") {
 		t.Errorf("frag: %d %q", c, body[:min(80, len(body))])

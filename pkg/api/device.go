@@ -117,3 +117,19 @@ type RequestResult struct {
 	// Forgotten is how many records lost their text (RequestForget).
 	Forgotten int `json:"forgotten,omitempty"`
 }
+
+// ---- today: what a computer's menu bar icon shows ----
+
+// GET /api/v1/device/today -> Today
+// The account's counted time today and what the server has not checked
+// yet: the same numbers as the account's own pages on the website. A
+// device asks only while its menu bar icon is running. An older server
+// answers 404, and the icon then shows neither.
+type Today struct {
+	// Seconds is the time counted today, in the account's time zone.
+	Seconds float64 `json:"seconds"`
+	// UncheckedSeconds is counted time that the server has not checked yet,
+	// and UncheckedPrompts the prompts sent in it.
+	UncheckedSeconds float64 `json:"unchecked_seconds"`
+	UncheckedPrompts int     `json:"unchecked_prompts"`
+}

@@ -39,6 +39,8 @@ That is the last step you take in a terminal. Everything after it happens on its
 
 Code as usual. Your hours show on your profile on the website within a few minutes.
 
+SeaTime puts an icon in the menu bar on macOS, in the notification area on Windows and in the system tray on Linux. Its menu shows your time today, the time that is not checked yet, and the project that you are working on. From the menu you can open the website, send your records now and check for updates. You can also hide the icon until the next login. On Linux, the desktop has to show status icons; GNOME needs the AppIndicator extension for that.
+
 SeaTime looks for new AI tools every 10 minutes and adds its hooks to them. If an update of a tool removes the hooks, SeaTime puts them back. If you used a tool while its hooks did not work, SeaTime fills in that time from the tool's own log.
 
 The Settings page on the website lists your computers. For each one, it shows when it last synced, its SeaTime version, the AI tools that it found, and any problem. If a computer is signed out, SeaTime opens the sign-in page in your browser. The Settings page also shows a button to approve that computer.
@@ -75,7 +77,7 @@ Each computer sends its records as you work. Every hour, on the hour, the server
 
 ## Contributing
 
-You need Go 1.27 or newer; cgo is not used.
+You need Go 1.27 or newer. Only the macOS menu bar icon uses cgo. A macOS binary that is built without cgo works, but it has no icon.
 
 ```sh
 go build -o bin/seatime ./cmd/seatime     # client
@@ -95,6 +97,7 @@ You never need these. Most of them do the same thing as the website, or as somet
 - `seatime name <project> <name>`: name a project. A name set on the website takes priority.
 - `seatime setup --also-hackatime=false`, `seatime update off`, `seatime forget`, `seatime uninstall`: the same as the settings above. `seatime update` installs the newest release now. `seatime uninstall --harness claude-code` removes the hooks from one tool, and SeaTime does not add them back.
 - `seatime setup --yes --no-wakatime`, `--no-service`, `--no-login`: install without those steps.
+- `seatime tray off`, `seatime tray on`: remove the menu bar icon from this computer, or bring it back. `seatime setup --yes --no-tray` installs without it.
 - `seatime inspect`: print exactly what the next sync would send (`--segment <project>`: a project's records as they are sent for checking).
 - `seatime emit`, `seatime token`: for plugins ([PLUGINS.md](PLUGINS.md)).
 
