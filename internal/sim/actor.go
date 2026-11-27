@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"seatime/internal/client/emit"
@@ -80,11 +81,14 @@ func (a *Actor) j(d time.Duration, frac float64) time.Duration {
 	return time.Duration(float64(d) * f).Round(time.Millisecond)
 }
 
-func (a *Actor) Wait(d time.Duration) {
+func (a *Actor) Wait(d time.Duration) { a.D.W.Advance(a.jit(d)) }
+
+// jit is a wait as the actor's Jit stretches or shrinks it.
+func (a *Actor) jit(d time.Duration) time.Duration {
 	if a.Jit > 0 && a.jrng != nil {
 		d = time.Duration(float64(d) * (1 + a.Jit*(2*a.jrng.Float64()-1)))
 	}
-	a.D.W.Advance(d)
+	return d
 }
 func (a *Actor) WaitJ(d time.Duration) { a.Wait(a.j(d, 0.25)) }
 
@@ -119,9 +123,31 @@ func (a *Actor) End() {
 	a.D.Hook("SessionEnd", p)
 }
 
-// Prompt: the human reads/thinks/types for ~think, then submits text.
+// Prompt: the human reads/thinks/types for ~think, then submits text. The
+// end of that time is the typing, at about a word a second: key presses
+// the OS idle timer sees (a script's are not, NoHands).
 func (a *Actor) Prompt(think time.Duration, text string) {
-	a.WaitJ(think)
+	d := a.jit(a.j(think, 0.25))
+	typing := min(d, time.Duration(len(strings.Fields(text)))*time.Second)
+	a.D.W.Advance(d - typing)
+	a.Type(typing)
+	a.Send(text)
+}
+
+// Type is the person at the keyboard for d: a key press every 2 s.
+func (a *Actor) Type(d time.Duration) {
+	for d > 0 {
+		a.touch()
+		step := min(d, 2*time.Second)
+		a.D.W.Advance(step)
+		d -= step
+	}
+}
+
+// Paste is a prompt the person did not type: a moment at the keyboard to
+// copy it and paste it, then sent.
+func (a *Actor) Paste(text string) {
+	a.Type(4 * time.Second)
 	a.Send(text)
 }
 

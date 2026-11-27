@@ -413,7 +413,12 @@ func (s *Server) promptChecksOf(ctx context.Context, deviceID string, hashes []s
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return nil, err
 	}
-	set := &promptcheck.Set{On: s.promptCheckOn(), Pass: map[string]bool{}, Min: map[string]float64{}, Periods: periods}
+	pol := s.pol()
+	set := &promptcheck.Set{On: pol.PromptCheck, Pass: map[string]bool{}, Min: map[string]float64{}, Periods: periods,
+		TypedWPM: pol.TypedWPM}
+	if pol.TypedCut {
+		set.Plain = pol.Rules.Shortest()
+	}
 	set.On = set.OnAt(s.now())
 	if len(hashes) == 0 {
 		return set, nil

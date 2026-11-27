@@ -187,10 +187,17 @@ type Set struct {
 	// Periods are the switch's history (periods.go): the cap rule applies
 	// to what happened while it was on. Empty: On applies to all time.
 	Periods []Period `json:"periods,omitempty"`
+	// TypedWPM and Plain are the rule for a prompt that was not typed
+	// (typed.go): the most words a minute of input a typed prompt has, and
+	// the minutes such a prompt counts at most. 0: no such rule. They are
+	// the server's and are never sent anywhere.
+	TypedWPM float64 `json:"-"`
+	Plain    float64 `json:"-"`
 }
 
 // Minutes is how long a prompt may count under the cap rule: its
-// verdict's minutes when it passed, nothing otherwise. hopeful takes a
+// verdict's minutes when it passed (the shortest kind's at most when it
+// was not typed, typed.go), nothing otherwise. hopeful takes a
 // prompt still waiting for its check as passing with FallbackMinutes.
 func (s *Set) Minutes(e event.Event, hopeful bool) time.Duration {
 	if s == nil || e.Kind != event.Prompt || e.CheckHash == "" {
@@ -200,11 +207,11 @@ func (s *Set) Minutes(e event.Event, hopeful bool) time.Duration {
 	switch {
 	case ok && pass:
 		if m := s.Min[e.CheckHash]; m > 0 {
-			return Mins(m)
+			return s.typed(e, Mins(m))
 		}
-		return FallbackMinutes
+		return s.typed(e, FallbackMinutes)
 	case !ok && hopeful:
-		return FallbackMinutes
+		return s.typed(e, FallbackMinutes)
 	}
 	return 0
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"seatime/internal/client/idle"
 	"seatime/internal/client/presence"
 	"seatime/internal/client/store"
 	"seatime/pkg/event"
@@ -103,11 +104,11 @@ func TestParseNumstat(t *testing.T) {
 
 // A plugin cannot preset SeaTime's own measurements through `seatime emit`.
 func TestEmitStripsFacts(t *testing.T) {
-	evs, err := DecodeEvents([]byte(`{"kind":"prompt","text":"hello there my friend","input_before_ms":5,"presence":"input only","run":{"writes":9},"front_window":"yes"}`), Defaults{Harness: "plug"})
+	evs, err := DecodeEvents([]byte(`{"kind":"prompt","text":"hello there my friend","input_before_ms":5,"input_ms":90000,"input_over_ms":90000,"input_unwatched_ms":60000,"presence":"input only","run":{"writes":9},"front_window":"yes"}`), Defaults{Harness: "plug"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e := evs[0]; e.InputBeforeMS != nil || e.Presence != "" || e.Run != nil || e.FrontWindow != "" {
+	if e := evs[0]; e.InputBeforeMS != nil || e.InputMS != nil || e.InputOverMS != 0 || e.InputUnwatchedMS != 0 || e.Presence != "" || e.Run != nil || e.FrontWindow != "" {
 		t.Fatalf("%+v", e)
 	}
 }
@@ -154,5 +155,54 @@ func TestEmitCannotPresetQueued(t *testing.T) {
 	}
 	if evs[0].QueuedMS != 0 || evs[0].Extra[event.TypedAtKey] != nil {
 		t.Errorf("kept: %d %v", evs[0].QueuedMS, evs[0].Extra)
+	}
+}
+
+// A prompt carries the input the daemon counted since the project's
+// previous prompt, whatever the session: the first prompt of a project
+// asks as far back as the daemon counts, the next one since the first. A
+// prompt whose device did not read its own idle timer (over SSH, or with
+// none) carries nothing, and the daemon is not asked.
+func TestInputBeforeAPrompt(t *testing.T) {
+	p, home := setup(t)
+	a, b := filepath.Join(home, "a"), filepath.Join(home, "b")
+	ms := int64(900)
+	local := presence.Facts{Presence: presence.InputOnly, InputBeforeMS: &ms}
+	p.Presence = func() presence.Facts { return local }
+	var asked []time.Time
+	p.Input = func(since time.Time) (idle.Input, bool) {
+		asked = append(asked, since)
+		return idle.Input{Input: 40 * time.Second, Unwatched: 5 * time.Second, Over: 3 * time.Minute}, true
+	}
+	t0 := time.Now().Add(-10 * time.Minute).UTC().Truncate(time.Millisecond)
+	send := func(at time.Duration, session, dir, text string) event.Event {
+		t.Helper()
+		e, err := p.EmitEvent(event.Event{TS: t0.Add(at), Kind: event.Prompt, SessionID: session, CWD: dir, Text: text})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+	first := send(0, "s1", a, "add a settings page with a dark mode toggle")
+	if first.InputMS == nil || *first.InputMS != 40000 || first.InputOverMS != 180000 || first.InputUnwatchedMS != 5000 {
+		t.Fatalf("first prompt: %+v", first)
+	}
+	send(time.Minute, "s9", b, "write the importer for the old format")
+	send(3*time.Minute, "s2", a, "keep the old colours behind a flag") // a new chat in the same project
+	if len(asked) != 3 || !asked[0].IsZero() || !asked[1].IsZero() || !asked[2].Equal(t0) {
+		t.Fatalf("asked since %v, want the start, the start, and project a's first prompt (%v)", asked, t0)
+	}
+	local = presence.Facts{Presence: presence.TerminalOnly}
+	if e := send(5*time.Minute, "s2", a, "now the same for the profile page"); e.InputMS != nil || e.InputOverMS != 0 || len(asked) != 3 {
+		t.Fatalf("a prompt over SSH: %+v, asked %d times", e, len(asked))
+	}
+	// the daemon does not answer: nothing is recorded, never "no input"
+	local = presence.Facts{Presence: presence.InputOnly, InputBeforeMS: &ms}
+	p.Input = func(time.Time) (idle.Input, bool) { return idle.Input{}, false }
+	if e := send(6*time.Minute, "s2", a, "and one more page for the billing settings"); e.InputMS != nil {
+		t.Fatalf("with no answer: %+v", e)
+	}
+	if _, err := p.Store.VerifyChain(); err != nil {
+		t.Fatal(err)
 	}
 }

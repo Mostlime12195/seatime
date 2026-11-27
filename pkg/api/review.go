@@ -120,15 +120,24 @@ type ReviewRecord struct {
 	Model   string     `json:"model,omitempty"`
 
 	// a prompt
-	Words          int          `json:"words,omitempty"`
-	New            *bool        `json:"new,omitempty"`
-	Check          *ReviewCheck `json:"check,omitempty"`
-	QueuedMS       int64        `json:"queued_ms,omitempty"`
-	InputBeforeMS  *int64       `json:"input_before_ms,omitempty"`
-	TerminalIdleS  *int         `json:"terminal_idle_s,omitempty"`
-	FrontWindow    string       `json:"front_window,omitempty"`
-	SessionPrompts int          `json:"session_prompts,omitempty"`
-	OtherStopHook  *bool        `json:"other_stop_hook,omitempty"`
+	Words         int          `json:"words,omitempty"`
+	New           *bool        `json:"new,omitempty"`
+	Check         *ReviewCheck `json:"check,omitempty"`
+	QueuedMS      int64        `json:"queued_ms,omitempty"`
+	InputBeforeMS *int64       `json:"input_before_ms,omitempty"`
+	// InputMS, InputOverMS and InputUnwatchedMS: the keyboard and mouse
+	// input the device counted before the prompt (pkg/event Event).
+	// NotTyped: the prompt has more words than a person can type in that
+	// input, by the server's setting. Check.Minutes is then what it counts
+	// for, which is the shortest kind's minutes at most.
+	InputMS          *int64 `json:"input_ms,omitempty"`
+	InputOverMS      int64  `json:"input_over_ms,omitempty"`
+	InputUnwatchedMS int64  `json:"input_unwatched_ms,omitempty"`
+	NotTyped         bool   `json:"not_typed,omitempty"`
+	TerminalIdleS    *int   `json:"terminal_idle_s,omitempty"`
+	FrontWindow      string `json:"front_window,omitempty"`
+	SessionPrompts   int    `json:"session_prompts,omitempty"`
+	OtherStopHook    *bool  `json:"other_stop_hook,omitempty"`
 
 	// a tool call or a hand edit
 	Tool          string `json:"tool,omitempty"`

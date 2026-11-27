@@ -116,6 +116,7 @@ func (d *Daemon) Handler(cfg config.Config) http.Handler { return d.handler(cfg)
 
 func (d *Daemon) handler(cfg config.Config) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/seatime/input", d.handleInput)
 	mux.HandleFunc("/seatime/ping", func(w http.ResponseWriter, r *http.Request) {
 		var ms debugStats
 		ms.read()

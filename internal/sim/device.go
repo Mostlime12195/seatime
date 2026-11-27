@@ -70,7 +70,8 @@ type Device struct {
 	lastInput time.Time
 
 	// Remote: the person works over SSH, so their keys reach the tool's
-	// terminal and the device's own idle timer never sees them.
+	// terminal and the device's own idle timer never sees them: the hook
+	// does not read it.
 	Remote bool
 	// the simulated git checkouts: the current commit and when it was made
 	head     map[string]string
@@ -96,8 +97,8 @@ func (d *Device) sliceTick() {
 	if !d.nextSlice.After(d.W.Now()) { // after a sleep: no catching up
 		d.nextSlice = d.W.Now().Add(idle.SliceEvery)
 	}
-	if d.idleRec != nil && d.projectActive() {
-		d.idleRec.Slice(context.Background())
+	if d.idleRec != nil {
+		d.idleRec.Fast(context.Background()) // every 5 s while a project is active or someone is at the machine
 	}
 }
 
@@ -179,7 +180,17 @@ func (w *World) NewDevice(user, name string) (*Device, error) {
 	// what the hook records at a prompt: the OS idle timer, which a person
 	// typing the prompt has just touched and a script never has
 	d.Pipe.Presence = func() presence.Facts {
-		return presence.Probe{Getenv: func(string) string { return "" }, Idle: d.idleRec.Src}.AtPrompt(context.Background())
+		env := func(k string) string {
+			if d.Remote && k == "SSH_CONNECTION" {
+				return "203.0.113.7 50000 10.0.0.2 22"
+			}
+			return ""
+		}
+		return presence.Probe{Getenv: env, Idle: d.idleRec.Src}.AtPrompt(context.Background())
+	}
+	// and what the hook asks the daemon: the input it counted before the prompt
+	d.Pipe.Input = func(since time.Time) (idle.Input, bool) {
+		return d.idleRec.InputSince(context.Background(), since)
 	}
 	d.head, d.headTime = map[string]string{}, map[string]time.Time{}
 	d.Pipe.Repo = d.repo

@@ -11,8 +11,10 @@ import (
 	"seatime/internal/adapters"
 	"seatime/internal/client/checks"
 	"seatime/internal/client/config"
+	"seatime/internal/client/daemon"
 	"seatime/internal/client/emit"
 	"seatime/internal/client/gitscan"
+	"seatime/internal/client/idle"
 	"seatime/internal/client/logx"
 	"seatime/internal/client/presence"
 	"seatime/internal/client/protected"
@@ -148,7 +150,8 @@ func openHookPipeline() (*store.Store, *emit.Pipeline, error) {
 	if err != nil {
 		return st, p, err
 	}
-	front := config.FrontOn(config.Load(), st.PromptCheckOn())
+	cfg := config.Load()
+	front := config.FrontOn(cfg, st.PromptCheckOn())
 	p.Presence = func() presence.Facts {
 		probe := presence.System(front)
 		if front {
@@ -162,6 +165,9 @@ func openHookPipeline() (*store.Store, *emit.Pipeline, error) {
 		}
 		return emit.PresenceOf(context.Background(), probe)()
 	}
+	// how long the keyboard and mouse were in use before the prompt: the
+	// daemon has counted, the hook has only this moment
+	p.Input = func(since time.Time) (idle.Input, bool) { return daemon.InputSince(cfg, since) }
 	p.Repo = emit.GitRepo(context.Background())
 	p.Snap = func(root string) *promptcheck.Snapshot { return checks.Snapshot(context.Background(), root) }
 	home := config.Home()

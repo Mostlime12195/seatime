@@ -78,6 +78,8 @@ type World struct {
 // WorldOpts tweak a World (the demo-database builder uses them).
 type WorldOpts struct {
 	Start time.Time // the fake clock's start (default Epoch)
+	// ReviewKey, when set, is a key the server's review API takes.
+	ReviewKey string
 }
 
 // UserAlias, when set, renames every simulated person (account name and the
@@ -109,8 +111,11 @@ func NewWorldWith(dir string, wo WorldOpts) (*World, error) {
 		start = Epoch
 	}
 	w := &World{Dir: dir, Clock: &Clock{t: start}, Store: st, users: map[string]*http.Client{}}
-	srv, err := server.New(server.Config{Dev: true, BaseURL: "http://seatime.sim", Secret: "sim-secret",
-		Admins: map[string]bool{}},
+	cfg := server.Config{Dev: true, BaseURL: "http://seatime.sim", Secret: "sim-secret", Admins: map[string]bool{}}
+	if wo.ReviewKey != "" {
+		cfg.ReviewKeys = []string{wo.ReviewKey}
+	}
+	srv, err := server.New(cfg,
 		st, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		st.Close()

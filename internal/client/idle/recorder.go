@@ -43,14 +43,19 @@ type Recorder struct {
 	// answered go out as FrontSlices.
 	Front func(ctx context.Context) (front, ok bool)
 
+	// Near is how long after the last input the 5 s tick goes on reading
+	// the idle timer with no project active (Fast). Default 10 min.
+	Near time.Duration
+
 	MaxGap      time.Duration // default 90 s
 	MinNoInput  time.Duration // default 60 s
 	FlushActive time.Duration // default 10 min
 	FlushIdle   time.Duration // default 60 min
 
-	mu   sync.Mutex
-	win  *window
-	last Reading
+	mu    sync.Mutex
+	win   *window
+	last  Reading
+	meter meter
 }
 
 type window struct {
@@ -82,6 +87,9 @@ func (r *Recorder) defaults() {
 	if r.FlushIdle == 0 {
 		r.FlushIdle = time.Hour
 	}
+	if r.Near == 0 {
+		r.Near = 10 * time.Minute
+	}
 }
 
 // Last returns the latest reading.
@@ -110,6 +118,8 @@ func (r *Recorder) Tick(ctx context.Context) {
 	r.last = Reading{Src: name, At: now, Idle: d, OK: err == nil}
 	if err != nil {
 		r.last.Err = err.Error()
+	} else {
+		r.meter.add(now, d)
 	}
 	if w := r.win; w != nil && (now.Sub(w.last) > r.MaxGap || now.Before(w.last) || w.src != name) {
 		r.flushLocked()
@@ -162,7 +172,11 @@ func (w *window) addNoInput(from, to int64) {
 // came after the previous sample, is marked as having input. A sample that
 // cannot be read marks nothing (that minute is then not measured, never
 // "no input").
-func (r *Recorder) Slice(ctx context.Context) {
+func (r *Recorder) Slice(ctx context.Context) { r.sample(ctx, true) }
+
+// sample reads the idle timer once for the meter and, when record is set,
+// for the window's slices.
+func (r *Recorder) sample(ctx context.Context, record bool) {
 	r.defaults()
 	now := r.Now().Round(0).UTC()
 	src := r.Src
@@ -174,11 +188,15 @@ func (r *Recorder) Slice(ctx context.Context) {
 		return
 	}
 	front, frontOK := false, false
-	if r.Front != nil {
+	if record && r.Front != nil {
 		front, frontOK = r.Front(ctx)
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.meter.add(now, d)
+	if !record {
+		return
+	}
 	w := r.win
 	if w == nil || w.src != src.Name() {
 		return // the minute tick opens windows; it comes within a minute
@@ -263,8 +281,8 @@ func (r *Recorder) record(w *window) event.Event {
 	return e
 }
 
-// Run ticks every interval until ctx ends, then flushes. While Active
-// says a project is active it also samples every SliceEvery.
+// Run ticks every interval until ctx ends, then flushes. Every SliceEvery
+// it also runs Fast.
 func (r *Recorder) Run(ctx context.Context, every time.Duration) {
 	r.Tick(ctx)
 	t := time.NewTicker(every)
@@ -279,9 +297,7 @@ func (r *Recorder) Run(ctx context.Context, every time.Duration) {
 		case <-t.C:
 			r.Tick(ctx)
 		case <-fast.C:
-			if r.Active != nil && r.Active() {
-				r.Slice(ctx)
-			}
+			r.Fast(ctx)
 		}
 	}
 }

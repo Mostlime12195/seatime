@@ -14,6 +14,7 @@ import (
 	"seatime/internal/server/store"
 	"seatime/pkg/api"
 	"seatime/pkg/event"
+	"seatime/pkg/promptcheck"
 )
 
 // The review API: what Hack Club's review tool (Spyglass) reads to show a
@@ -279,6 +280,7 @@ func (s *Server) segmentBundle(ctx context.Context, id string) (*api.Bundle, err
 func (s *Server) reviewRecord(ctx context.Context, sg *store.Segment, e *event.Event, path string, sessions map[string]int) api.ReviewRecord {
 	r := api.ReviewRecord{TS: e.TS, Kind: e.Kind, Harness: e.Harness, Model: e.Model,
 		Words: e.Words, New: e.New, QueuedMS: e.QueuedMS, InputBeforeMS: e.InputBeforeMS, TerminalIdleS: e.TerminalIdleS,
+		InputMS: e.InputMS, InputOverMS: e.InputOverMS, InputUnwatchedMS: e.InputUnwatchedMS,
 		FrontWindow: e.FrontWindow, SessionPrompts: e.SessionPrompts, OtherStopHook: e.OtherStopHook,
 		Tool: e.Tool, Write: e.Write, ExitCode: e.ExitCode, Lines: e.Lines, LineNo: e.LineNo, CursorPos: e.CursorPos,
 		LineAdditions: e.LineAdditions, LineDeletions: e.LineDeletions, Category: e.Category, File: path,
@@ -286,6 +288,8 @@ func (s *Server) reviewRecord(ctx context.Context, sg *store.Segment, e *event.E
 		Run: e.Run, Git: e.Git, PromptInLog: e.PromptInLog,
 		Presence: e.Presence, IdleSrc: e.IdleSrc, WindowMS: e.WindowMS, NoInput: e.NoInput,
 		InputSlices: e.InputSlices, FrontSlices: e.FrontSlices, Backfilled: e.Backfilled}
+	pol := s.pol()
+	r.NotTyped = promptcheck.NotTyped(*e, pol.TypedWPM)
 	if e.SessionID != "" {
 		n, seen := sessions[e.SessionID]
 		if !seen {
@@ -297,6 +301,9 @@ func (s *Server) reviewRecord(ctx context.Context, sg *store.Segment, e *event.E
 	if e.Kind == event.Prompt && e.CheckHash != "" {
 		if v, err := s.store.PromptVerdict(ctx, sg.DeviceID, e.CheckHash); err == nil && v != nil {
 			r.Check = &api.ReviewCheck{Pass: v.Pass, Kind: v.Kind, Minutes: v.Minutes, Labels: v.Labels, Skipped: v.Skipped, Rules: v.Rules, Model: v.Model}
+			if r.NotTyped && v.Pass && pol.TypedCut {
+				r.Check.Minutes = min(v.Minutes, pol.Rules.Shortest()) // as it was counted (promptcheck.Set.Minutes)
+			}
 		} else if sg.Status == store.SegPending || sg.Open && sg.Pending > 0 {
 			// (an open stretch with prompts being checked is not pending:
 			// it is counted again at the next cycle anyway)

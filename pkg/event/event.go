@@ -126,6 +126,16 @@ type Event struct {
 	// InputBeforeMS, on a prompt: milliseconds from the last keyboard or
 	// mouse input to the prompt, by the OS idle timer.
 	InputBeforeMS *int64 `json:"input_before_ms,omitempty"`
+	// InputMS, on a prompt: milliseconds of keyboard or mouse input since
+	// the project's previous prompt on this device (an hour back at most),
+	// as the daemon counted them from the OS idle timer in 5 s steps. A
+	// pointer, because 0 is a measurement. InputOverMS is how long that
+	// time was. InputUnwatchedMS is how much of it the daemon could not
+	// say anything about: up to a minute after it started, or after the
+	// computer was left alone. Numbers only, and never which keys.
+	InputMS          *int64 `json:"input_ms,omitempty"`
+	InputOverMS      int64  `json:"input_over_ms,omitempty"`
+	InputUnwatchedMS int64  `json:"input_unwatched_ms,omitempty"`
 	// TerminalIdleS, on a prompt from a terminal reached over SSH or on a
 	// machine with no desktop: seconds since keys last reached that
 	// terminal, rounded down to 8 s steps.

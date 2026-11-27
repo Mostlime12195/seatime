@@ -62,6 +62,7 @@ func (p *Pipeline) hold(raw event.Event, m *holdMark, root, key string, now time
 		f := p.Presence()
 		raw.Presence, raw.InputBeforeMS, raw.TerminalIdleS, raw.FrontWindow = f.Presence, f.InputBeforeMS, f.TerminalIdleS, f.FrontWindow
 	}
+	p.inputFacts(&raw, key)
 	h := store.Held{Session: raw.SessionID, PromptID: m.id, Log: m.log, At: now, Prompt: raw}
 	if root != "" {
 		if p.Snap != nil {

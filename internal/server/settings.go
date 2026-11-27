@@ -58,6 +58,13 @@ type policy struct {
 	// Earlier is how many earlier prompts of the project that passed a
 	// check shows the model (the undo red team's fix 2).
 	Earlier int
+	// TypedWPM is the most words a minute of keyboard and mouse input a
+	// typed prompt has (pkg/promptcheck typed.go). 0: prompts are not
+	// compared with their input.
+	TypedWPM float64
+	// TypedCut: a prompt that was not typed counts for the shortest kind's
+	// minutes at most. Off: such a prompt is only marked for the reviewer.
+	TypedCut bool
 	// MinClient is the oldest SeaTime version whose syncs, checks and
 	// submissions are taken ("" none; C2).
 	MinClient string
@@ -130,6 +137,17 @@ func init() {
 		numSetting("prompt_check_earlier", "SEATIME_PROMPT_CHECK_EARLIER", "Earlier prompts shown to the judge",
 			"How many of the project's earlier prompts that passed (text only, each cut short) go in front of the context turns, so a reworded repeat reads as asking again after a new chat or a run of throwaway prompts. Devices send this many. 0 sends none.",
 			"20", 0, 60, func(p *policy, f float64) { p.Earlier = int(f) }),
+		numSetting("prompt_typed_wpm", "SEATIME_PROMPT_TYPED_WPM", "Fastest typing (words a minute)",
+			"A device counts the keyboard and mouse input before each prompt. A prompt with more words than this many a minute of that input was pasted, dictated or sent by a program: the review tool marks it. Prompts whose input was not measured are left alone. 0 turns this off.",
+			"200", 0, 2000, func(p *policy, f float64) { p.TypedWPM = f }),
+		{Key: "prompt_typed_cut", Env: "SEATIME_PROMPT_TYPED_CUT", Label: "Prompts that were not typed count less",
+			Help:    "On: a prompt marked as not typed counts for the shortest time the check rules give any kind of prompt. Off: it is only marked, and counts as its check says.",
+			Choices: []string{"off", "on"},
+			Def:     func(*Server) string { return envOr("SEATIME_PROMPT_TYPED_CUT", "off") },
+			Parse: func(_ *Server, p *policy, v string) (err error) {
+				p.TypedCut, err = parseOnOff(v)
+				return err
+			}},
 		numSetting("max_devices", "SEATIME_MAX_DEVICES", "Devices per account",
 			"Connecting one more is refused until one is revoked in Settings.", "10", 1, 1000, func(p *policy, f float64) { p.MaxDevices = int(f) }),
 		{Key: "min_client_version", Env: "SEATIME_MIN_CLIENT_VERSION", Label: "Oldest SeaTime taken",

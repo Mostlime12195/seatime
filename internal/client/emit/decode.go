@@ -78,6 +78,7 @@ func stripDerived(e *event.Event) {
 	e.Chars, e.Words, e.New = 0, 0, nil // decided from Text by the pipeline
 	// presence and run facts are SeaTime's own measurements
 	e.Presence, e.InputBeforeMS, e.TerminalIdleS, e.FrontWindow = "", nil, nil, ""
+	e.InputMS, e.InputOverMS, e.InputUnwatchedMS = nil, 0, 0
 	e.SessionPrompts, e.OtherStopHook, e.InputSlices, e.QueuedMS = 0, nil, nil, 0
 	delete(e.Extra, event.TypedAtKey)
 	e.Run, e.Git, e.PromptInLog = nil, nil, nil

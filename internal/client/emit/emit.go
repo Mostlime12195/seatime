@@ -11,6 +11,7 @@ import (
 
 	"seatime/internal/adapters/claudecode"
 	"seatime/internal/client/checks"
+	"seatime/internal/client/idle"
 	"seatime/internal/client/logx"
 	"seatime/internal/client/presence"
 	"seatime/internal/client/project"
@@ -33,6 +34,10 @@ type Pipeline struct {
 	// Presence, when set, reads the presence facts at a prompt (the hook
 	// sets it: it runs in the person's session, at the moment of the prompt).
 	Presence func() presence.Facts
+	// Input, when set, asks the daemon how much keyboard or mouse input
+	// came since a time (idle.Recorder.InputSince); ok is false when it
+	// cannot say. Only the hook sets it, as Presence.
+	Input func(since time.Time) (in idle.Input, ok bool)
 	// Repo, when set, reads git's counts at an agent stop. Only the hook
 	// sets it: the daemon never opens a project folder (protected folders).
 	Repo func(root string) *event.GitFacts
@@ -309,6 +314,9 @@ func (p *Pipeline) emit(e event.Event, hold *holdMark, got *store.Held) (event.E
 	switch e.Kind {
 	case event.Prompt:
 		p.promptFacts(&e)
+		if got == nil { // a prompt that was kept back was measured then
+			p.inputFacts(&e, e.Project)
+		}
 		p.queuedFor(&e, typed)
 	case event.AgentStop:
 		p.stopFacts(&e, root)

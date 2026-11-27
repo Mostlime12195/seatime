@@ -138,6 +138,8 @@ the default. Secrets and addresses stay in the environment.
 | `prompt_check_late_days` | `SEATIME_PROMPT_CHECK_LATE_DAYS` | 14 | how far back a late verdict raises synced minutes and devices recount |
 | `prompt_check_queue_days` | `SEATIME_PROMPT_CHECK_QUEUE_DAYS` | 30 | sent to devices; current devices ignore it and keep every prompt (older ones dropped a prompt's text after this long) |
 | `prompt_check_earlier` | `SEATIME_PROMPT_CHECK_EARLIER` | 20 | earlier passed prompts of the project shown to the judge |
+| `prompt_typed_wpm` | `SEATIME_PROMPT_TYPED_WPM` | 200 | the most words a minute of keyboard and mouse input a typed prompt has. The review API marks a prompt with more `not_typed`. Applied each time a stretch is counted, so a change reaches the stretches still being counted. 0 turns it off |
+| `prompt_typed_cut` | `SEATIME_PROMPT_TYPED_CUT=on` | off | a prompt marked `not_typed` counts for the shortest kind's minutes at most. Off: it is only marked |
 | `max_devices` | `SEATIME_MAX_DEVICES` | 10 | devices per account; connecting another is refused |
 | `min_client_version` | `SEATIME_MIN_CLIENT_VERSION` | none | older devices are told to update; their syncs wait and are recounted after the update, their checks and segments answer 426 |
 | `admin_ids` | `SEATIME_ADMIN_IDS` | none | see above |

@@ -303,6 +303,15 @@ func (r *Rules) MinutesOf(kind string) float64 {
 	return r.Kinds[len(r.Kinds)-1].Minutes
 }
 
+// Shortest is the least minutes any kind may count.
+func (r *Rules) Shortest() float64 {
+	m := r.Kinds[0].Minutes
+	for _, k := range r.Kinds {
+		m = min(m, k.Minutes)
+	}
+	return m
+}
+
 // Longest is the most minutes any kind may count.
 func (r *Rules) Longest() time.Duration {
 	var m float64

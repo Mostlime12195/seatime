@@ -34,6 +34,29 @@ func (p *Pipeline) promptFacts(e *event.Event) {
 	}
 }
 
+// inputFacts adds how much keyboard or mouse input the daemon counted
+// since the project's previous prompt on this device, on a prompt the hook
+// read the computer's own idle timer for. Over SSH, or with no idle timer,
+// nothing is added: that input would not be the person's.
+func (p *Pipeline) inputFacts(e *event.Event, project string) {
+	if p.Input == nil || e.InputBeforeMS == nil || e.InputMS != nil {
+		return
+	}
+	var since time.Time
+	if project != "" {
+		prev, err := p.Store.Events(store.Query{Project: project, Kinds: []event.Kind{event.Prompt}, Desc: true, Limit: 1})
+		if err == nil && len(prev) > 0 {
+			since = prev[0].TS
+		}
+	}
+	in, ok := p.Input(since)
+	if !ok {
+		return
+	}
+	ms := in.Input.Milliseconds()
+	e.InputMS, e.InputOverMS, e.InputUnwatchedMS = &ms, in.Over.Milliseconds(), in.Unwatched.Milliseconds()
+}
+
 // queuedFor sets QueuedMS on a prompt the AI tool held in its queue, typed
 // at typed (from the tool's log). The typed time must fall after the
 // session's previous prompt, inside the run the person was waiting on, and

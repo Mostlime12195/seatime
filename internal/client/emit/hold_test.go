@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"seatime/internal/client/idle"
 	"seatime/internal/client/presence"
 	"seatime/internal/client/store"
 	"seatime/pkg/event"
@@ -65,6 +66,9 @@ func TestHeldPromptIsRecordedWhenAPersonSentIt(t *testing.T) {
 	}
 	facts := 0
 	p.Facts = func(_, name string) *promptcheck.Project { facts++; return &promptcheck.Project{Name: name} }
+	p.Input = func(time.Time) (idle.Input, bool) {
+		return idle.Input{Input: 25 * time.Second, Over: time.Minute}, true
+	}
 	a := filepath.Join(home, "a")
 	t0 := time.Now().Add(-time.Minute).UTC().Truncate(time.Millisecond)
 	for _, e := range []event.Event{
@@ -85,6 +89,10 @@ func TestHeldPromptIsRecordedWhenAPersonSentIt(t *testing.T) {
 	// the tool writes the prompt to its log; its first tool call follows
 	log["p1"] = "human"
 	p.Presence = func() presence.Facts { t.Error("presence read again at the release"); return presence.Facts{} }
+	p.Input = func(time.Time) (idle.Input, bool) {
+		t.Error("input counted again at the release")
+		return idle.Input{}, false
+	}
 	p.Snap = func(string) *promptcheck.Snapshot {
 		return &promptcheck.Snapshot{Files: map[string]string{"at": "later"}}
 	}
@@ -96,7 +104,8 @@ func TestHeldPromptIsRecordedWhenAPersonSentIt(t *testing.T) {
 	}
 	evs, _ := p.Store.Events(store.Query{Kinds: []event.Kind{event.Prompt}})
 	pr := evs[0]
-	if !pr.TS.Equal(t0) || pr.Presence != "active" || pr.InputBeforeMS == nil || *pr.InputBeforeMS != 120 || pr.SessionPrompts != 1 || pr.CheckHash == "" || pr.Project != "github.com/me/a" {
+	if !pr.TS.Equal(t0) || pr.Presence != "active" || pr.InputBeforeMS == nil || *pr.InputBeforeMS != 120 || pr.SessionPrompts != 1 || pr.CheckHash == "" || pr.Project != "github.com/me/a" ||
+		pr.InputMS == nil || *pr.InputMS != 25000 || pr.InputOverMS != 60000 {
 		t.Fatalf("prompt: %+v", pr)
 	}
 	if _, has := pr.Extra[event.HoldKey]; has {

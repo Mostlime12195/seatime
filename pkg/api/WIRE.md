@@ -132,6 +132,9 @@ After each sync, SeaTime sends the records that your local log gained since the 
 - `records.entries[].event.line_deletions`: lines your editor plugin says an edit removed (a number)
 - `records.entries[].event.presence`: how presence was measured on this device, one of four fixed phrases: input+front window, input only, terminal only, not measured
 - `records.entries[].event.input_before_ms`: on a prompt, milliseconds since the computer last saw keyboard or mouse input (never which key or where)
+- `records.entries[].event.input_ms`: on a prompt, how many milliseconds the keyboard or mouse was in use since the project's previous prompt on this computer, an hour back at most, counted in 5-second steps (never which keys or where)
+- `records.entries[].event.input_over_ms`: on a prompt, how long that time was
+- `records.entries[].event.input_unwatched_ms`: on a prompt, how much of that time SeaTime could not count input in
 - `records.entries[].event.terminal_idle_s`: on a prompt from a terminal over SSH or without a desktop, seconds since keys last reached that terminal, in 8-second steps (never which keys)
 - `records.entries[].event.front_window`: on a prompt, only if you switched the front-window check on: yes, no, or no window attached. Never the name of any program
 - `records.entries[].event.session_prompts`: on a prompt, how many prompts the AI tool's session has had so far
